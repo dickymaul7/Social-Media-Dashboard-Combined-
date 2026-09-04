@@ -84,7 +84,8 @@ export function Reports() {
       page.drawText("Data note: this report uses migrated dashboard snapshots and brand-scoped workspace data; it is not presented as a live Instagram API feed.", { x: 48, y: 32, size: 7.5, font: regular, color: muted, maxWidth: width - 96 });
 
       const bytes = await pdf.save();
-      const blob = new Blob([bytes], { type: "application/pdf" });
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([arrayBuffer], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
