@@ -4,3 +4,4 @@ export { PostingSchedule } from "./posting-schedule";
 export { CompetitorBenchmarking } from "./competitor-benchmarking";
 export { ContentCalendar } from "./content-calendar";
 export { WorkspaceHub } from "./workspace-hub";
+export { Reports } from "./reports";
