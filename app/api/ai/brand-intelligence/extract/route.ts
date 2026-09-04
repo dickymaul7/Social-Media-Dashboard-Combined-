@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAIModel } from "@/lib/ai/core";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,13 @@ function sameOrigin(request: Request) {
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
   if (!origin || !host) return true;
   try { return new URL(origin).host === host; } catch { return false; }
+}
+
+async function requireSessionIfConfigured() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return true;
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return Boolean(user);
 }
 
 function stripCodeFences(text: string) {
@@ -62,6 +70,7 @@ function normalizeSources(value: unknown, fallbackNames: string[]) {
 export async function POST(request: Request) {
   try {
     if (!sameOrigin(request)) return errorJson("Cross-origin extraction request ditolak.", 403);
+    if (!(await requireSessionIfConfigured())) return errorJson("Session login tidak valid. Silakan sign in ulang.", 401);
 
     const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) return errorJson("GEMINI_API_KEY belum dikonfigurasi di Vercel.", 503);
