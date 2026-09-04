@@ -5,3 +5,4 @@ export { CompetitorBenchmarking } from "./competitor-benchmarking";
 export { ContentCalendar } from "./content-calendar";
 export { WorkspaceHub } from "./workspace-hub";
 export { Reports } from "./reports";
+export { BrandIntelligence } from "./brand-intelligence";
