@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Megaphone, Menu, Search, Settings, Users, X
 } from "lucide-react";
 import { useActiveBrand } from "@/components/active-brand";
-import { AudienceAnalytics, CompetitorBenchmarking, ContentCalendar, ContentPerformance, PostingSchedule, WorkspaceHub } from "@/components/dashboard";
+import { AudienceAnalytics, CompetitorBenchmarking, ContentCalendar, ContentPerformance, PostingSchedule, Reports, WorkspaceHub } from "@/components/dashboard";
 
 type Section = "Overview" | "Content Performance" | "Audience Analytics" | "Posting Schedule" | "Competitor Benchmarking" | "Content Calendar" | "Workspace Hub" | "Reports" | "Content Generator";
 
@@ -41,6 +41,7 @@ export default function Home() {
     if (active === "Competitor Benchmarking") return <CompetitorBenchmarking/>;
     if (active === "Content Calendar") return <ContentCalendar/>;
     if (active === "Workspace Hub") return <WorkspaceHub/>;
+    if (active === "Reports") return <Reports/>;
     if (active === "Content Generator") return <section className="panel empty-panel"><div className="empty-icon"><Sparkles size={22}/></div><h2>Content Generator</h2><p>Brand Intelligence-powered content strategy will be connected here. Open the dedicated workspace to generate case-led story angles and briefs.</p><a className="primary" href="/content-generator">Open Content Generator</a></section>;
     if (active === "Overview") return <><div className="metric-grid">{cards.map(c=><div className="metric" key={c[0]}><span>{c[0]}</span><strong>{c[1]}</strong><em>{c[2]}</em></div>)}</div>
       <div className="grid-two"><section className="panel"><div className="panel-head"><div><h2>Performance Overview</h2><p>Views and reach trend</p></div><button className="ghost" onClick={()=>setActive("Content Performance")}>View details</button></div><div className="chart"><div className="bars">{[42,55,48,72,64,81,76,94,68,86,79,100].map((h,i)=><div key={i} className="bar" style={{height:h+"%"}}><span/></div>)}</div><div className="axis"><span>W1</span><span>W2</span><span>W3</span><span>W4</span></div></div></section>
