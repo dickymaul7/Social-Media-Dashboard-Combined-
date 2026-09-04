@@ -2,8 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { ArrowRight, Brain, FileText, Search, Sparkles } from "lucide-react";
-import { buildBrandContext, resolveAudience } from "@/lib/brand-intelligence";
-
 
 type BrandIntelligence = { positioning:string; value_proposition:string; target_audiences:string[]; audience_pain_points:string[]; tone_of_voice:string; key_messages:string[]; brand_pov:string; core_expertise:string[] };
 
