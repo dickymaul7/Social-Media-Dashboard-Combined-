@@ -16,7 +16,9 @@ const sections: {name:Section; icon:React.ReactNode}[] = [
   {name:"Competitor Benchmarking",icon:<Gauge size={18}/>},
   {name:"Content Calendar",icon:<CalendarDays size={18}/>},
   {name:"Workspace Hub",icon:<Megaphone size={18}/>},
-  {name:"Reports",icon:<FileText size={18}/>}\n  {name:"Content Generator",icon:<Sparkles size={18}/>}\n
+  {name:"Reports",icon:<FileText size={18}/>},
+  {name:"Content Generator",icon:<Sparkles size={18}/>},
+
 ];
 
 export default function Home() {
