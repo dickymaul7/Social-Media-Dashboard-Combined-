@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ActiveBrandProvider } from "@/components/active-brand";
+import { BrandIntelligenceProvider } from "@/components/brand-intelligence-context";
 import "./globals.css";
 import "./social-dashboard.css";
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body><ActiveBrandProvider>{children}</ActiveBrandProvider></body>
+      <body><ActiveBrandProvider><BrandIntelligenceProvider>{children}</BrandIntelligenceProvider></ActiveBrandProvider></body>
     </html>
   );
 }
