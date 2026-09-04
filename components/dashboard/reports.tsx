@@ -7,6 +7,7 @@ import { useActiveBrand } from "@/components/active-brand";
 import { defaultInstagramMetrics, instagramCompetitors, socialPosts } from "@/lib/social-dashboard/data";
 
 const fmt = (value: number) => new Intl.NumberFormat("en-US").format(value);
+const toSlug = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 export function Reports() {
   const { activeBrand } = useActiveBrand();
@@ -89,7 +90,7 @@ export function Reports() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${activeBrand.slug}-social-media-report.pdf`;
+      anchor.download = `${toSlug(activeBrand.name) || "brand"}-social-media-report.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
     } finally {
