@@ -6,5 +6,6 @@ export { ContentCalendar } from "./content-calendar";
 export { WorkspaceHub } from "./workspace-hub";
 export { Reports } from "./reports";
 export { BrandIntelligence } from "./brand-intelligence";
+export { BrandAlignment } from "./brand-alignment";
 export { TeamTasks } from "./team-tasks";
 export { UsersAccess } from "./users-access";
