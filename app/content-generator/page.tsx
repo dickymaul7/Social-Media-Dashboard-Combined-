@@ -3,9 +3,12 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, Brain, FileText, Search, Sparkles } from "lucide-react";
 import { buildBrandContext, resolveAudience } from "@/lib/brand-intelligence";
-import type { BrandIntelligence } from "@/lib/types";
 
-const demoIntelligence: BrandIntelligence = {
+
+type BrandIntelligence = { positioning:string; value_proposition:string; target_audiences:string[]; audience_pain_points:string[]; tone_of_voice:string; key_messages:string[]; brand_pov:string; core_expertise:string[] };
+
+function buildBrandContext(intel: BrandIntelligence) { return `Positioning: ${intel.positioning}\nValue Proposition: ${intel.value_proposition}\nAudience: ${intel.target_audiences.join(", ")}\nPain Points: ${intel.audience_pain_points.join(", ")}\nTone: ${intel.tone_of_voice}\nKey Messages: ${intel.key_messages.join("; ")}\nBrand POV: ${intel.brand_pov}\nExpertise: ${intel.core_expertise.join(", ")}`; }
+function resolveAudience(value:string, intel:BrandIntelligence) { return value.trim() || intel.target_audiences.join(", "); }\n\nconst demoIntelligence: BrandIntelligence = {
   positioning: "Strategic corporate learning and capability partner.",
   value_proposition: "Menghubungkan kebutuhan bisnis dengan pengembangan kapabilitas organisasi.",
   target_audiences: ["Business leaders", "HR leaders", "L&D professionals"],
