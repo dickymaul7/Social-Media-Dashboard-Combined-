@@ -5,7 +5,8 @@ import {
   BarChart3, CalendarDays, FileText, Gauge, Instagram, Sparkles,
   LayoutDashboard, Megaphone, Menu, Search, Settings, Users, X
 } from "lucide-react";
-import { AudienceAnalytics, CompetitorBenchmarking, ContentPerformance, PostingSchedule } from "@/components/dashboard";
+import { useActiveBrand } from "@/components/active-brand";
+import { AudienceAnalytics, CompetitorBenchmarking, ContentCalendar, ContentPerformance, PostingSchedule, WorkspaceHub } from "@/components/dashboard";
 
 type Section = "Overview" | "Content Performance" | "Audience Analytics" | "Posting Schedule" | "Competitor Benchmarking" | "Content Calendar" | "Workspace Hub" | "Reports" | "Content Generator";
 
@@ -24,8 +25,8 @@ const sections: {name:Section; icon:React.ReactNode}[] = [
 export default function Home() {
   const [active,setActive]=useState<Section>("Overview");
   const [open,setOpen]=useState(false);
-  const [brand,setBrand]=useState("Proxsis Consulting Group");
   const [period,setPeriod]=useState("Last 30 Days");
+  const { activeBrand, brands, setActiveBrandId } = useActiveBrand();
   const cards=useMemo(()=>[
     ["Total Views","1.24M","+18.4%"],
     ["Accounts Reached","382.6K","+12.7%"],
@@ -38,6 +39,8 @@ export default function Home() {
     if (active === "Audience Analytics") return <AudienceAnalytics/>;
     if (active === "Posting Schedule") return <PostingSchedule/>;
     if (active === "Competitor Benchmarking") return <CompetitorBenchmarking/>;
+    if (active === "Content Calendar") return <ContentCalendar/>;
+    if (active === "Workspace Hub") return <WorkspaceHub/>;
     if (active === "Content Generator") return <section className="panel empty-panel"><div className="empty-icon"><Sparkles size={22}/></div><h2>Content Generator</h2><p>Brand Intelligence-powered content strategy will be connected here. Open the dedicated workspace to generate case-led story angles and briefs.</p><a className="primary" href="/content-generator">Open Content Generator</a></section>;
     if (active === "Overview") return <><div className="metric-grid">{cards.map(c=><div className="metric" key={c[0]}><span>{c[0]}</span><strong>{c[1]}</strong><em>{c[2]}</em></div>)}</div>
       <div className="grid-two"><section className="panel"><div className="panel-head"><div><h2>Performance Overview</h2><p>Views and reach trend</p></div><button className="ghost" onClick={()=>setActive("Content Performance")}>View details</button></div><div className="chart"><div className="bars">{[42,55,48,72,64,81,76,94,68,86,79,100].map((h,i)=><div key={i} className="bar" style={{height:h+"%"}}><span/></div>)}</div><div className="axis"><span>W1</span><span>W2</span><span>W3</span><span>W4</span></div></div></section>
@@ -45,7 +48,7 @@ export default function Home() {
       <div className="grid-two"><section className="panel"><div className="panel-head"><div><h2>Top Content</h2><p>Best-performing posts this period</p></div></div><div className="rows">{["Leadership in AI Era","ISO 9001: What Changes","GRC in One Framework"].map((x,i)=><div className="row" key={x}><span className="rank">{i+1}</span><div><b>{x}</b><small>{["Carousel","Reels","Single Post"][i]}</small></div><strong>{["8.4%","7.1%","6.2%"][i]}</strong></div>)}</div></section>
       <section className="panel"><div className="panel-head"><div><h2>Quick Actions</h2><p>Continue your social media workflow</p></div></div><div className="quick-grid"><button onClick={()=>setActive("Content Calendar")}><CalendarDays/><span>Open Calendar</span></button><button onClick={()=>setActive("Audience Analytics")}><Instagram/><span>Audience Analytics</span></button><button onClick={()=>setActive("Reports")}><FileText/><span>Generate Report</span></button><button onClick={()=>setActive("Workspace Hub")}><Users/><span>Team Workspace</span></button></div></section></div>
     </>;
-    return <section className="panel empty-panel"><div className="empty-icon">{sections.find(s=>s.name===active)?.icon}</div><h2>{active}</h2><p>This migrated workspace is ready for the next integration stage. Slice 02 will connect this module to active brand and shared persistence.</p><button className="primary">Continue migration</button></section>;
+    return <section className="panel empty-panel"><div className="empty-icon">{sections.find(s=>s.name===active)?.icon}</div><h2>{active}</h2><p>This migrated workspace is ready for the next integration stage.</p><button className="primary">Continue migration</button></section>;
   };
 
   return <main className="app-shell">
@@ -56,8 +59,8 @@ export default function Home() {
       <div className="sidebar-bottom"><button className="nav-item"><Settings size={18}/><span>Settings</span></button></div>
     </aside>
     <section className="content">
-      <header className="topbar"><button className="mobile-menu" onClick={()=>setOpen(true)}><Menu size={20}/></button><div className="search"><Search size={17}/><input placeholder="Search dashboard..." /></div><div className="top-actions"><select value={brand} onChange={e=>setBrand(e.target.value)}><option>Proxsis Consulting Group</option><option>Proxsis Strategy</option><option>Proxsis Infra</option></select><button className="avatar">DS</button></div></header>
-      <div className="page"><div className="page-head"><div><p className="eyebrow">SOCIAL MEDIA INTELLIGENCE</p><h1>{active}</h1><p className="muted">Monitor performance, identify opportunities, and turn insights into action.</p></div><select className="period" value={period} onChange={e=>setPeriod(e.target.value)}><option>Last 30 Days</option><option>Last 7 Days</option><option>Last 90 Days</option></select></div>{renderActive()}</div>
+      <header className="topbar"><button className="mobile-menu" onClick={()=>setOpen(true)}><Menu size={20}/></button><div className="search"><Search size={17}/><input placeholder="Search dashboard..." /></div><div className="top-actions"><select value={activeBrand.id} onChange={e=>setActiveBrandId(e.target.value)}>{brands.map(brand=><option key={brand.id} value={brand.id}>{brand.name}</option>)}</select><button className="avatar">DS</button></div></header>
+      <div className="page"><div className="page-head"><div><p className="eyebrow">SOCIAL MEDIA INTELLIGENCE</p><h1>{active}</h1><p className="muted">Active brand: {activeBrand.name}. Monitor performance, identify opportunities, and turn insights into action.</p></div><select className="period" value={period} onChange={e=>setPeriod(e.target.value)}><option>Last 30 Days</option><option>Last 7 Days</option><option>Last 90 Days</option></select></div>{renderActive()}</div>
     </section>
   </main>;
 }
