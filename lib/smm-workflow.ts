@@ -20,7 +20,7 @@ export function loadCampaignIds():string[]{return readIds(campaignIndexKey)}
 export function loadAllCampaigns():CampaignBundle[]{return loadCampaignIds().map(loadCampaign).filter((x):x is CampaignBundle=>Boolean(x)).sort((a,b)=>b.campaign.created_at.localeCompare(a.campaign.created_at));}
 export function loadCampaignsForBrand(brandId:string):CampaignBundle[]{return loadAllCampaigns().filter(bundle=>bundle.campaign.brand_id===brandId)}
 export async function hydrateCampaignsFromSupabase(brandId:string){return loadCampaignsForBrand(brandId)}
-export function saveBrief(brief:BriefRecord){if(typeof window==="undefined")return;window.localStorage.setItem(briefKey(brief.id),JSON.stringify(brief));const ids=loadBriefIds();writeIds(briefIndexKey,[brief.id,...ids.filter(id=>id!==brief.id)].slice(0,200));}
+export function saveBrief(brief:BriefRecord){if(typeof window==="undefined")return;const normalized:BriefRecord=brief.human_qc==="approved"&&Boolean(brief.scheduled_for)&&brief.production_status!=="designed"?{...brief,production_status:"ready_to_design"}:brief;window.localStorage.setItem(briefKey(normalized.id),JSON.stringify(normalized));const ids=loadBriefIds();writeIds(briefIndexKey,[normalized.id,...ids.filter(id=>id!==normalized.id)].slice(0,200));window.dispatchEvent(new CustomEvent("proxsis-smm:brief-updated",{detail:{briefId:normalized.id}}));}
 export function loadBrief(id:string):BriefRecord|null{if(typeof window==="undefined")return null;try{const raw=window.localStorage.getItem(briefKey(id));return raw?JSON.parse(raw):null}catch{return null}}
 export function loadBriefIds():string[]{return readIds(briefIndexKey)}
 export function loadAllBriefs():BriefRecord[]{return loadBriefIds().map(loadBrief).filter((x):x is BriefRecord=>Boolean(x));}
