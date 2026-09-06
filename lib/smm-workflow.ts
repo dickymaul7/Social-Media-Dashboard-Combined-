@@ -25,3 +25,49 @@ export function loadBrief(id:string):BriefRecord|null{if(typeof window==="undefi
 export function loadBriefIds():string[]{return readIds(briefIndexKey)}
 export function loadAllBriefs():BriefRecord[]{return loadBriefIds().map(loadBrief).filter((x):x is BriefRecord=>Boolean(x))}
 export async function hydrateBriefsFromSupabase(brandId:string){const rows=await fetchWorkspaceRows<{payload:BriefRecord}>("smm_briefs",`select=payload&brand_id=eq.${encodeURIComponent(brandId)}&order=updated_at.desc&limit=200`);for(const row of rows)if(row?.payload?.id)saveBriefLocal(row.payload);return loadAllBriefs().filter(b=>b.brand_id===brandId)}
+
+function sameBrandName(a:unknown,b:unknown){return String(a||"").trim().toLocaleLowerCase()===String(b||"").trim().toLocaleLowerCase()}
+
+/**
+ * Migrates pre-Supabase Combined records that used slug brand IDs to the UUID used by
+ * the shared SMM Simplified `brands` table. Matching is deliberately based on exact
+ * normalized brand name; unrelated brands are never reassigned.
+ */
+export async function reconcileLegacyBrandIdentity(brandId:string,brandName:string){
+  if(typeof window==="undefined"||!brandId||!brandName)return {campaigns:0,briefs:0};
+  let campaigns=0;let briefs=0;
+
+  for(const bundle of loadAllCampaigns()){
+    if(bundle.campaign.brand_id!==brandId&&sameBrandName(bundle.campaign.brand_name,brandName)){
+      const next:CampaignBundle={...bundle,campaign:{...bundle.campaign,brand_id:brandId,brand_name:brandName}};
+      saveCampaignLocal(next);
+      await syncWorkspaceRecord("smm_campaigns",{id:next.campaign.id,brand_id:brandId,payload:next,created_at:next.campaign.created_at});
+      campaigns++;
+    }
+  }
+  for(const brief of loadAllBriefs()){
+    if(brief.brand_id!==brandId&&sameBrandName(brief.brand_name,brandName)){
+      const next:BriefRecord={...brief,brand_id:brandId,brand_name:brandName,updated_at:brief.updated_at||new Date().toISOString()};
+      saveBriefLocal(next);
+      await syncWorkspaceRecord("smm_briefs",{id:next.id,brand_id:brandId,campaign_id:next.campaign_id,payload:next,updated_at:next.updated_at});
+      briefs++;
+    }
+  }
+
+  // Also recover records that may already have been synced remotely under the legacy slug.
+  const [remoteCampaigns,remoteBriefs]=await Promise.all([
+    fetchWorkspaceRows<{id:string;brand_id:string|null;payload:CampaignBundle;created_at:string}>("smm_campaigns","select=id,brand_id,payload,created_at&limit=200"),
+    fetchWorkspaceRows<{id:string;brand_id:string|null;campaign_id:string;payload:BriefRecord;updated_at:string}>("smm_briefs","select=id,brand_id,campaign_id,payload,updated_at&limit=400")
+  ]);
+  for(const row of remoteCampaigns){
+    const bundle=row?.payload;if(!bundle?.campaign?.id||row.brand_id===brandId||!sameBrandName(bundle.campaign.brand_name,brandName))continue;
+    const next:CampaignBundle={...bundle,campaign:{...bundle.campaign,brand_id:brandId,brand_name:brandName}};
+    saveCampaignLocal(next);await syncWorkspaceRecord("smm_campaigns",{id:row.id,brand_id:brandId,payload:next,created_at:row.created_at||next.campaign.created_at});campaigns++;
+  }
+  for(const row of remoteBriefs){
+    const brief=row?.payload;if(!brief?.id||row.brand_id===brandId||!sameBrandName(brief.brand_name,brandName))continue;
+    const next:BriefRecord={...brief,brand_id:brandId,brand_name:brandName};
+    saveBriefLocal(next);await syncWorkspaceRecord("smm_briefs",{id:row.id,brand_id:brandId,campaign_id:row.campaign_id||next.campaign_id,payload:next,updated_at:row.updated_at||next.updated_at});briefs++;
+  }
+  return {campaigns,briefs};
+}
