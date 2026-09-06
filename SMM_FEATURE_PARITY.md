@@ -1,44 +1,48 @@
 # SMM Simplified → Combined Feature Parity
 
-Target: every production workflow from SMM Simplified remains accessible from the Combined dashboard without modifying the SMM-Simplified repository.
+## Implemented in Slice 05 branch
+- Active Brand shared context + persistent selection
+- Brand Intelligence editor per active brand
+- Brand Intelligence upload + Gemini extraction
+- Human review after extraction
+- Quick Brief / Brief Studio with autosave
+- Topic Lock: user topic outranks brand expertise
+- Gemini + Tavily live research
+- Case relevance validation (topic relevance + campaign alignment >= 7/10)
+- 5 case-led Story Angles
+- Campaign History per active brand
+- Full Storytelling Brief generation
+- AI Quality Review + automatic revision when initial quality is weak
+- Human editable story sections
+- Reorder / drag-drop / delete sections
+- AI Improve + re-score
+- Human QC with invalidation after edits
+- Scheduling
+- Production Content Calendar
+- Quick Move / drag-drop schedule
+- Ready to Design / Designed workflow
+- External Canva / Drive design-file link
+- Team Tasks workspace
+- Users & Access UI foundation
+- Role / permission catalog (super_admin, manager, content_writer, designer, viewer)
+- Brand Alignment QC
+- Supabase Auth client/server foundation + login route
+- Supabase persistence bridge for Campaigns and Briefs
+- Brand-scoped RLS / membership foundation
+- Browser storage retained as graceful fallback during rollout
 
-## Migrated / active
-- Social analytics shell
-- Content Performance
-- Audience Analytics
-- Posting Schedule
-- Competitor Benchmarking
-- Brand-scoped Content Calendar (basic migrated calendar)
-- Workspace Hub
-- Reports + PDF export
-- Active Brand context
-- Brand Intelligence editor
-- Content Generator consuming Active Brand Intelligence
-- Brand Intelligence upload + AI extraction (current slice)
+## Still requires validation / activation
+1. Apply `supabase/migrations/20260906_smm_persistence_foundation.sql` to the target Supabase project.
+2. Confirm Vercel has NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, GEMINI_API_KEY, TAVILY_API_KEY and optional GEMINI_MODEL.
+3. Smoke-test authenticated cross-device Campaign/Brief hydration.
+4. Move Team Tasks from local fallback to Supabase task_assignments in the UI.
+5. Activate permission enforcement only after owner/admin bootstrap and brand memberships are verified.
+6. Run full Vercel build/type validation and fix blockers before merge.
+7. Final parity audit against SMM branches: brand-overview, content expansion, calendar expansion, task assignment, users/access.
 
-## Remaining parity blocks
-1. Supabase Auth + user-role foundation
-2. Brand database persistence + brand-level RLS/membership
-3. Quick Brief draft persistence
-4. Gemini + Tavily live research
-5. Five Story Angles generation
-6. Full Storytelling Brief route/editor
-7. Slide edit/reorder/delete
-8. AI Improve
-9. Human QC + invalidation after edits
-10. Schedule Brief
-11. Production Content Calendar parity (drag/drop, Quick Move)
-12. Ready to Design / Designed state
-13. External design-file link
-14. Task assignment + team overview
-15. Brand alignment panel/check
-16. Role/access management screens
-17. Analytics shell alignment with active brand
-
-## Non-regression rules
-- Do not modify SMM-Simplified.
-- Do not replace working Combined social analytics modules.
-- Do not weaken Supabase RLS when database/auth is migrated.
-- Do not commit secrets.
-- AI outputs must remain case-led, evidence-backed, and Bahasa Indonesia by default.
-- Final parity requires Vercel build success and route-level smoke tests for each migrated block.
+## Integrity rules
+- SMM-Simplified repository remains read-only.
+- Do not fake live Instagram/Meta API connectivity.
+- Gemini/Tavily secrets stay server-side.
+- Brand Intelligence is a guardrail; it must not override the user Topic Lock.
+- Keep existing Social Analytics functionality intact while adding SMM workflows.
