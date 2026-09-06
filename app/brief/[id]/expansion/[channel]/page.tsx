@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Copy, RefreshCw, Save } from "lucide-react";
+import { ArrowLeft, CalendarDays, Copy, RefreshCw, Save } from "lucide-react";
 import { loadBrief, loadCampaign } from "@/lib/smm-workflow";
+import { loadExpansionCalendarItem, saveExpansionCalendarItem, type ExpansionChannel } from "@/lib/expansion-calendar";
 
-type Channel="linkedin"|"seo_geo";
+type Channel=ExpansionChannel;
 const isChannel=(v:string):v is Channel=>v==="linkedin"||v==="seo_geo";
 const keyFor=(id:string,channel:Channel)=>`proxsis-smm:expansion:${id}:${channel}`;
+function formatDate(value:string){return new Intl.DateTimeFormat("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date(`${value}T12:00:00`))}
 
 export default function ExpansionPage(){
  const {id,channel:raw}=useParams<{id:string;channel:string}>();
@@ -19,12 +21,15 @@ export default function ExpansionPage(){
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState("");
  const [message,setMessage]=useState("");
+ const [scheduleDate,setScheduleDate]=useState("");
+ const [scheduledFor,setScheduledFor]=useState("");
 
- useEffect(()=>{if(!channel||typeof window==="undefined")return;try{const rawValue=localStorage.getItem(keyFor(id,channel));if(rawValue)setContent(JSON.parse(rawValue))}catch{}},[id,channel]);
+ useEffect(()=>{if(!channel||typeof window==="undefined")return;try{const rawValue=localStorage.getItem(keyFor(id,channel));if(rawValue)setContent(JSON.parse(rawValue));const scheduled=loadExpansionCalendarItem(id,channel);if(scheduled){setScheduledFor(scheduled.scheduled_for);setScheduleDate(scheduled.scheduled_for)}}catch{}},[id,channel]);
  async function generate(){if(!channel||!brief||!bundle)return;setLoading(true);setError("");setMessage("");try{const res=await fetch("/api/ai/expansion",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({channel,brief,campaignBundle:bundle})});const payload=await res.json().catch(()=>({}));if(!res.ok||!payload?.ok)throw new Error(payload?.error||"Generate gagal.");setContent(payload.content);localStorage.setItem(keyFor(id,channel),JSON.stringify(payload.content));setMessage("Derivative content berhasil dibuat dan disimpan di browser.")}catch(err){setError(err instanceof Error?err.message:"Generate gagal.")}finally{setLoading(false)}}
  useEffect(()=>{if(channel&&brief&&bundle&&!content&&!loading)void generate()},[channel,brief,bundle]); // eslint-disable-line react-hooks/exhaustive-deps
  function update(key:string,value:any){setContent(current=>({...current,[key]:value}));setMessage("")}
  function save(){if(!channel||!content)return;localStorage.setItem(keyFor(id,channel),JSON.stringify(content));setMessage("Perubahan tersimpan.")}
+ function schedule(){if(!channel||!brief||!scheduleDate)return;const title=channel==="linkedin"?String(content?.hook||brief.working_title):String(content?.seo_title||content?.h1||brief.working_title);saveExpansionCalendarItem({id:`expansion-${id}-${channel}`,brief_id:id,brand_id:brief.brand_id,brand_name:brief.brand_name,channel,title,scheduled_for:scheduleDate,updated_at:new Date().toISOString()});setScheduledFor(scheduleDate);setMessage(`${channel==="linkedin"?"LinkedIn":"SEO/GEO"} dijadwalkan untuk ${formatDate(scheduleDate)} dan masuk Content Calendar.`)}
  async function copy(){if(!content)return;await navigator.clipboard.writeText(JSON.stringify(content,null,2));setMessage("Content copied.")}
  if(!channel||!brief||!bundle)return <main style={{padding:32,fontFamily:"Arial,sans-serif"}}><button onClick={()=>router.push(`/brief/${id}`)}>← Master Brief</button><p style={{color:"#a3152d"}}>Expansion tidak tersedia atau brief belum ditemukan.</p></main>;
  const fields=Object.entries(content||{});
@@ -39,7 +44,9 @@ export default function ExpansionPage(){
    <section style={card}><h2 style={{marginTop:0}}>Editable Content</h2>{fields.filter(([key])=>!Array.isArray(content[key])&&typeof content[key]!=="object").map(([key,value])=><label key={key} style={label}><span>{key.replaceAll("_"," ")}</span><textarea rows={key.includes("draft")||key==="body_copy"?18:key==="outline"?10:4} value={String(value??"")} onChange={e=>update(key,e.target.value)} style={textarea}/></label>)}
    {fields.filter(([key])=>Array.isArray(content[key])).map(([key,value])=><label key={key} style={label}><span>{key.replaceAll("_"," ")}</span><textarea rows={Array.isArray(value)&&value.some((x:any)=>typeof x==="object")?12:6} value={Array.isArray(value)&&value.some((x:any)=>typeof x==="object")?JSON.stringify(value,null,2):(value as any[]).join("\n")} onChange={e=>{try{update(key,JSON.parse(e.target.value))}catch{if(!e.target.value.trim().startsWith("["))update(key,e.target.value.split("\n").map(x=>x.trim()).filter(Boolean))}}} style={textarea}/></label>)}
    </section>
-   <aside style={{display:"grid",gap:14,alignContent:"start"}}><div style={{...card,background:"#2a2426",color:"white"}}><p style={{fontSize:11,fontWeight:800,letterSpacing:".1em",color:"#e6a7b6"}}>QUALITY STANDARD</p><h3>{channel==="linkedin"?"Native, not repurposed.":"Searchable + quotable."}</h3><p style={{fontSize:13,lineHeight:1.7,color:"#ddd4d7"}}>{channel==="linkedin"?"Hook, rhythm, executive relevance, case mechanism, dan CTA ditulis ulang khusus LinkedIn.":"SEO intent, semantic coverage, direct answers, entity clarity, FAQ, evidence boundaries, dan answer-engine readability diprioritaskan bersama."}</p></div><div style={card}><h3>Master Brief</h3><p style={{fontSize:13,lineHeight:1.6}}><strong>{brief.working_title}</strong><br/>{brief.brand_name}<br/>{brief.target_audience}</p><button style={primary} onClick={()=>router.push(`/brief/${id}`)}>Buka Master Brief</button></div></aside>
+   <aside style={{display:"grid",gap:14,alignContent:"start"}}><div style={{...card,background:"#2a2426",color:"white"}}><p style={{fontSize:11,fontWeight:800,letterSpacing:".1em",color:"#e6a7b6"}}>QUALITY STANDARD</p><h3>{channel==="linkedin"?"Native, not repurposed.":"Searchable + quotable."}</h3><p style={{fontSize:13,lineHeight:1.7,color:"#ddd4d7"}}>{channel==="linkedin"?"Hook, rhythm, executive relevance, case mechanism, dan CTA ditulis ulang khusus LinkedIn.":"SEO intent, semantic coverage, direct answers, entity clarity, FAQ, evidence boundaries, dan answer-engine readability diprioritaskan bersama."}</p></div><div style={card}><h3>Master Brief</h3><p style={{fontSize:13,lineHeight:1.6}}><strong>{brief.working_title}</strong><br/>{brief.brand_name}<br/>{brief.target_audience}</p><button style={primary} onClick={()=>router.push(`/brief/${id}`)}>Buka Master Brief</button></div>
+   <div style={card}><p style={{fontSize:11,fontWeight:800,letterSpacing:".1em",color:"#9a1732"}}>CONTENT CALENDAR</p><h3 style={{marginTop:6}}>{scheduledFor?"Ubah Jadwal":"Jadwalkan Konten"}</h3>{scheduledFor&&<p style={{fontSize:12,color:"#756b70"}}>Terjadwal: {formatDate(scheduledFor)}</p>}<input type="date" value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} style={{...textarea,minHeight:0,height:42,resize:"none"}}/><button style={{...primary,width:"100%",justifyContent:"center",marginTop:10}} onClick={schedule} disabled={!scheduleDate}><CalendarDays size={14}/>{scheduledFor?"Simpan Ubah Jadwal":"Masukkan ke Calendar"}</button>{scheduledFor&&<button style={{...ghost,width:"100%",justifyContent:"center",marginTop:8}} onClick={()=>router.push("/?section=Content%20Calendar")}><CalendarDays size={14}/> Buka Content Calendar</button>}</div>
+   </aside>
   </div>}
  </main>;
 }
