@@ -7,35 +7,25 @@ export type ExpansionMeta={brief_id:string;channel:"linkedin"|"seo_geo";schedule
 const KEYS={brands:"proxsis-workspace:brands:v1",users:"proxsis-workspace:users:v1",tasks:"proxsis-workspace:tasks:v1",expansionMeta:"proxsis-workspace:expansion-meta:v1"};
 const DEFAULT_BRANDS:WorkspaceBrand[]=[{id:"proxsis-consulting-group",name:"Proxsis Consulting Group",status:"active"},{id:"proxsis-strategy",name:"Proxsis Strategy",status:"active"},{id:"proxsis-infra",name:"Proxsis Infra",status:"active"}];
 const DEFAULT_USERS:WorkspaceUser[]=[{id:"local-admin",name:"Workspace Admin",email:"admin@local",role:"super_admin",brand_ids:[],permissions:["*"],status:"active"}];
-
 function read<T>(key:string,fallback:T):T{if(typeof window==="undefined")return fallback;try{const raw=window.localStorage.getItem(key);return raw?JSON.parse(raw):fallback}catch{return fallback}}
 function write<T>(key:string,value:T){if(typeof window==="undefined")return;window.localStorage.setItem(key,JSON.stringify(value));window.dispatchEvent(new CustomEvent("proxsis-workspace:updated",{detail:{key}}));}
 export function supabaseConfigured(){return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL&&process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)}
-async function remoteUpsert(table:string,payload:unknown,onConflict="id"){const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;if(!url||!key)return;try{await fetch(`${url}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`,{method:"POST",headers:{apikey:key,Authorization:`Bearer ${key}`,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify(payload)})}catch{}}
-
+function remoteHeaders(){const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY||"";let token=key;if(typeof window!=="undefined"){try{const raw=localStorage.getItem("proxsis-auth:session:v1");const session=raw?JSON.parse(raw):null;if(session?.access_token)token=session.access_token}catch{}}return{apikey:key,Authorization:`Bearer ${token}`,"Content-Type":"application/json"}}
+export async function syncWorkspaceRecord(table:string,payload:unknown,onConflict="id"){const url=process.env.NEXT_PUBLIC_SUPABASE_URL;if(!url||!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)return false;try{const response=await fetch(`${url}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`,{method:"POST",headers:{...remoteHeaders(),Prefer:"resolution=merge-duplicates"},body:JSON.stringify(payload)});return response.ok}catch{return false}}
+export async function fetchWorkspaceRows<T>(table:string,query="select=*"):Promise<T[]>{const url=process.env.NEXT_PUBLIC_SUPABASE_URL;if(!url||!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)return[];try{const response=await fetch(`${url}/rest/v1/${table}?${query}`,{headers:remoteHeaders(),cache:"no-store"});if(!response.ok)return[];const rows=await response.json();return Array.isArray(rows)?rows:[]}catch{return[]}}
 export function loadBrands(){return read<WorkspaceBrand[]>(KEYS.brands,DEFAULT_BRANDS)}
-export function saveBrands(items:WorkspaceBrand[]){write(KEYS.brands,items);void remoteUpsert("brands",items)}
+export function saveBrands(items:WorkspaceBrand[]){write(KEYS.brands,items);void syncWorkspaceRecord("brands",items)}
 export function upsertBrand(item:WorkspaceBrand){const all=loadBrands();const next=[item,...all.filter(x=>x.id!==item.id)];saveBrands(next);return next}
 export function removeBrand(id:string){const next=loadBrands().filter(x=>x.id!==id);saveBrands(next);return next}
-
 export function loadUsers(){return read<WorkspaceUser[]>(KEYS.users,DEFAULT_USERS)}
-export function saveUsers(items:WorkspaceUser[]){write(KEYS.users,items);void remoteUpsert("workspace_users",items)}
+export function saveUsers(items:WorkspaceUser[]){write(KEYS.users,items);void syncWorkspaceRecord("workspace_users",items)}
 export function upsertUser(item:WorkspaceUser){const next=[item,...loadUsers().filter(x=>x.id!==item.id)];saveUsers(next);return next}
-
 export function loadTasks(){return read<WorkspaceTask[]>(KEYS.tasks,[])}
-export function saveTasks(items:WorkspaceTask[]){write(KEYS.tasks,items);void remoteUpsert("workspace_tasks",items)}
+export function saveTasks(items:WorkspaceTask[]){write(KEYS.tasks,items);void syncWorkspaceRecord("workspace_tasks",items)}
 export function upsertTask(item:WorkspaceTask){const next=[item,...loadTasks().filter(x=>x.id!==item.id)];saveTasks(next);return next}
 export function removeTask(id:string){const next=loadTasks().filter(x=>x.id!==id);saveTasks(next);return next}
-
 export function expansionMetaKey(briefId:string,channel:"linkedin"|"seo_geo"){return `${briefId}:${channel}`}
 export function loadExpansionMeta(){return read<Record<string,ExpansionMeta>>(KEYS.expansionMeta,{})}
 export function getExpansionMeta(briefId:string,channel:"linkedin"|"seo_geo"){return loadExpansionMeta()[expansionMetaKey(briefId,channel)]||null}
-export function saveExpansionMeta(meta:ExpansionMeta){const all=loadExpansionMeta();all[expansionMetaKey(meta.brief_id,meta.channel)]=meta;write(KEYS.expansionMeta,all);void remoteUpsert("content_expansion_meta",meta,"brief_id,channel");return meta}
-
-export const ROLE_PRESETS:Record<WorkspaceRole,string[]>={
- super_admin:["*"],
- manager:["brief.read","brief.write","calendar.manage","tasks.manage","brand.read","analytics.read","reports.read"],
- content_writer:["brief.read","brief.write","expansion.write","calendar.read","tasks.read","brand.read"],
- designer:["brief.read","calendar.read","design.manage","tasks.write","brand.read"],
- viewer:["brief.read","calendar.read","tasks.read","brand.read","analytics.read","reports.read"],
-};
+export function saveExpansionMeta(meta:ExpansionMeta){const all=loadExpansionMeta();all[expansionMetaKey(meta.brief_id,meta.channel)]=meta;write(KEYS.expansionMeta,all);void syncWorkspaceRecord("content_expansion_meta",meta,"brief_id,channel");return meta}
+export const ROLE_PRESETS:Record<WorkspaceRole,string[]>={super_admin:["*"],manager:["brief.read","brief.write","calendar.manage","tasks.manage","brand.read","analytics.read","reports.read"],content_writer:["brief.read","brief.write","expansion.write","calendar.read","tasks.read","brand.read"],designer:["brief.read","calendar.read","design.manage","tasks.write","brand.read"],viewer:["brief.read","calendar.read","tasks.read","brand.read","analytics.read","reports.read"]};
