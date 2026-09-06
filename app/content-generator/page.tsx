@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Brain, Clock3, Search, Sparkles } from "lucide-r
 import { useActiveBrand } from "@/components/active-brand";
 import { useBrandIntelligence } from "@/components/brand-intelligence-context";
 import { buildBrandContext, resolveAudience } from "@/lib/brand-intelligence";
-import { loadCampaignsForBrand, saveCampaign, type CampaignBundle } from "@/lib/smm-workflow";
+import { hydrateCampaignsFromSupabase, loadCampaignsForBrand, saveCampaign, type CampaignBundle } from "@/lib/smm-workflow";
 import "./page.css";
 
 type Format = "auto"|"carousel"|"reels"|"single_post";
@@ -29,10 +29,13 @@ export default function ContentGeneratorPage() {
   const resolvedAudience=useMemo(()=>resolveAudience(audience,intelligence),[audience,intelligence]);
 
   useEffect(()=>{
+    let active=true;
     setDraftReady(false);
     try{const raw=window.localStorage.getItem(draftKey);if(raw){const d=JSON.parse(raw);setTopic(d.topic??"");setAudience(d.audience??"");setObjective(d.objective??"");setCta(d.cta??"");setFormat(["carousel","reels","single_post"].includes(d.format)?d.format:"auto");setExtraContext(d.extraContext??"")}else{setTopic("");setAudience("");setObjective("");setCta("");setFormat("auto");setExtraContext("")};setHistory(loadCampaignsForBrand(activeBrand.id).slice(0,8))}
     catch{setHistory([])}
     finally{setDraftReady(true)}
+    void hydrateCampaignsFromSupabase(activeBrand.id).then(items=>{if(active)setHistory(items.slice(0,8))});
+    return()=>{active=false};
   },[draftKey,activeBrand.id]);
 
   useEffect(()=>{if(!draftReady)return;try{window.localStorage.setItem(draftKey,JSON.stringify({topic,audience,objective,cta,format,extraContext}))}catch{}},[draftKey,draftReady,topic,audience,objective,cta,format,extraContext]);
