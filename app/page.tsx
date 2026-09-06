@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3, Brain, CalendarDays, FileText, Gauge, Instagram, Sparkles,
   LayoutDashboard, Megaphone, Menu, Search, Settings, Users, X
@@ -23,11 +23,14 @@ const sections: {name:Section; icon:React.ReactNode}[] = [
   {name:"Content Generator",icon:<Sparkles size={18}/>},
 ];
 
+function isSection(value:string|null):value is Section{return Boolean(value&&sections.some(item=>item.name===value))}
+
 export default function Home() {
   const [active,setActive]=useState<Section>("Overview");
   const [open,setOpen]=useState(false);
   const [period,setPeriod]=useState("Last 30 Days");
   const { activeBrand, brands, setActiveBrandId } = useActiveBrand();
+  useEffect(()=>{const requested=new URLSearchParams(window.location.search).get("section");if(isSection(requested))setActive(requested)},[]);
   const cards=useMemo(()=>[
     ["Total Views","1.24M","+18.4%"],
     ["Accounts Reached","382.6K","+12.7%"],
