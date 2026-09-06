@@ -4,232 +4,67 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { CalendarDays, ExternalLink } from "lucide-react";
 import { useActiveBrand } from "@/components/active-brand";
 import { loadAllBriefs, saveBrief, type BriefRecord } from "@/lib/smm-workflow";
+import { loadExpansionCalendarItems, moveExpansionCalendarItem, type ExpansionCalendarItem } from "@/lib/expansion-calendar";
 
 type CalendarItem = {
-  brief: BriefRecord;
-  briefId: string;
-  title: string;
-  format: string;
-  brandName: string;
-  scheduledFor: string;
-  humanQcStatus: "pending" | "approved";
-  score: number;
-  designStatus: "ready_to_design" | "designed";
-  designFileUrl: string;
+  id:string;
+  kind:"social"|"linkedin"|"seo_geo";
+  brief?:BriefRecord;
+  expansion?:ExpansionCalendarItem;
+  briefId:string;
+  title:string;
+  format:string;
+  brandName:string;
+  scheduledFor:string;
+  humanQcStatus?:"pending"|"approved";
+  score?:number;
+  designStatus?:"ready_to_design"|"designed";
+  designFileUrl?:string;
 };
 
-const weekdayLabels = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+const weekdayLabels=["Sen","Sel","Rab","Kam","Jum","Sab","Min"];
+const channelLabel=(kind:CalendarItem["kind"])=>kind==="linkedin"?"LINKEDIN":kind==="seo_geo"?"SEO/GEO":"SOCIAL";
+function localDateString(date:Date){const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)}
+function monthTitle(date:Date){return new Intl.DateTimeFormat("id-ID",{month:"long",year:"numeric"}).format(date)}
+function formatShortDate(value:string){return new Intl.DateTimeFormat("id-ID",{day:"numeric",month:"short",year:"numeric"}).format(new Date(`${value}T12:00:00`))}
+function socialItem(brief:BriefRecord):CalendarItem|null{if(!brief.scheduled_for)return null;return{id:`social-${brief.id}`,kind:"social",brief,briefId:brief.id,title:brief.working_title||"Untitled content",format:brief.recommended_format||"content",brandName:brief.brand_name||"Brand",scheduledFor:brief.scheduled_for,humanQcStatus:brief.human_qc,score:Math.round(Number(brief.quality?.overall_score||0)),designStatus:brief.production_status==="designed"?"designed":"ready_to_design",designFileUrl:brief.design_url||""}}
+function expansionItem(item:ExpansionCalendarItem):CalendarItem{return{id:item.id,kind:item.channel,expansion:item,briefId:item.brief_id,title:item.title,format:item.channel==="linkedin"?"LinkedIn Post":"SEO/GEO Article",brandName:item.brand_name,scheduledFor:item.scheduled_for}}
 
-function localDateString(date: Date) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
+export function ContentCalendar(){
+ const {activeBrand}=useActiveBrand();
+ const [month,setMonth]=useState(()=>{const now=new Date();return new Date(now.getFullYear(),now.getMonth(),1)});
+ const [items,setItems]=useState<CalendarItem[]>([]);
+ const [draggingId,setDraggingId]=useState<string|null>(null);
+ const [dragOverDate,setDragOverDate]=useState<string|null>(null);
+ const [movingId,setMovingId]=useState<string|null>(null);
+ const [selectedId,setSelectedId]=useState<string|null>(null);
+ const [quickMoveDate,setQuickMoveDate]=useState("");
+ const [designFileUrl,setDesignFileUrl]=useState("");
+ const [message,setMessage]=useState("");
+ const [error,setError]=useState("");
 
-function monthTitle(date: Date) {
-  return new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(date);
-}
-
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`));
-}
-
-function toItem(brief: BriefRecord): CalendarItem | null {
-  if (!brief.scheduled_for) return null;
-  return {
-    brief,
-    briefId: brief.id,
-    title: brief.working_title || "Untitled content",
-    format: brief.recommended_format || "content",
-    brandName: brief.brand_name || "Brand",
-    scheduledFor: brief.scheduled_for,
-    humanQcStatus: brief.human_qc,
-    score: Math.round(Number(brief.quality?.overall_score || 0)),
-    designStatus: brief.production_status === "designed" ? "designed" : "ready_to_design",
-    designFileUrl: brief.design_url || "",
-  };
-}
-
-export function ContentCalendar() {
-  const { activeBrand } = useActiveBrand();
-  const [month, setMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const [items, setItems] = useState<CalendarItem[]>([]);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
-  const [movingId, setMovingId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [quickMoveDate, setQuickMoveDate] = useState("");
-  const [designFileUrl, setDesignFileUrl] = useState("");
-  const [designSaving, setDesignSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  function loadCalendar() {
-    const next = loadAllBriefs()
-      .filter((brief) => brief.brand_id === activeBrand.id && Boolean(brief.scheduled_for))
-      .map(toItem)
-      .filter((item): item is CalendarItem => Boolean(item))
-      .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
-    setItems(next);
-    if (selectedId && !next.some((item) => item.briefId === selectedId)) setSelectedId(null);
-  }
-
-  useEffect(() => {
-    loadCalendar();
-    const onStorage = () => loadCalendar();
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", onStorage);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", onStorage);
-    };
-  }, [activeBrand.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const calendarCells = useMemo(() => {
-    const year = month.getFullYear();
-    const monthIndex = month.getMonth();
-    const firstDay = new Date(year, monthIndex, 1);
-    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-    const leading = (firstDay.getDay() + 6) % 7;
-    const total = Math.ceil((leading + daysInMonth) / 7) * 7;
-    return Array.from({ length: total }, (_, index) => {
-      const dayNumber = index - leading + 1;
-      if (dayNumber < 1 || dayNumber > daysInMonth) return null;
-      const date = new Date(year, monthIndex, dayNumber);
-      return { dateString: localDateString(date), dayNumber };
-    });
-  }, [month]);
-
-  const itemsByDate = useMemo(() => {
-    const map = new Map<string, CalendarItem[]>();
-    for (const item of items) {
-      const current = map.get(item.scheduledFor) || [];
-      current.push(item);
-      map.set(item.scheduledFor, current);
-    }
-    return map;
-  }, [items]);
-
-  const selectedItem = items.find((item) => item.briefId === selectedId) || null;
-  const monthPrefix = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
-  const monthItems = items.filter((item) => item.scheduledFor.startsWith(monthPrefix));
-
-  function chooseItem(item: CalendarItem) {
-    setSelectedId(item.briefId);
-    setQuickMoveDate(item.scheduledFor);
-    setDesignFileUrl(item.designFileUrl);
-    setMessage("");
-    setError("");
-  }
-
-  function persistBrief(nextBrief: BriefRecord) {
-    saveBrief(nextBrief);
-    setItems((current) => current.map((item) => item.briefId === nextBrief.id ? (toItem(nextBrief) || item) : item));
-  }
-
-  async function moveBrief(briefId: string, dateString: string) {
-    const current = items.find((item) => item.briefId === briefId);
-    if (!current || !dateString || current.scheduledFor === dateString) {
-      setDraggingId(null);
-      setDragOverDate(null);
-      return;
-    }
-    setMovingId(briefId);
-    setError("");
-    setMessage("");
-    try {
-      const nextBrief = { ...current.brief, scheduled_for: dateString, updated_at: new Date().toISOString() };
-      persistBrief(nextBrief);
-      if (selectedId === briefId) setQuickMoveDate(dateString);
-      setMessage(`Jadwal dipindahkan ke ${formatShortDate(dateString)}.`);
-    } catch {
-      setError("Gagal memindahkan jadwal.");
-    } finally {
-      setMovingId(null);
-      setDraggingId(null);
-      setDragOverDate(null);
-    }
-  }
-
-  function onCardDragStart(event: DragEvent<HTMLElement>, briefId: string) {
-    setDraggingId(briefId);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", briefId);
-  }
-
-  function onDayDrop(event: DragEvent<HTMLElement>, dateString: string) {
-    event.preventDefault();
-    const briefId = event.dataTransfer.getData("text/plain") || draggingId;
-    if (briefId) void moveBrief(briefId, dateString);
-  }
-
-  function setDesignStatus(item: CalendarItem, nextStatus: "ready_to_design" | "designed") {
-    setDesignSaving(true);
-    const nextBrief = { ...item.brief, production_status: nextStatus, updated_at: new Date().toISOString() };
-    persistBrief(nextBrief);
-    setMessage(nextStatus === "designed" ? "Status diubah menjadi Designed." : "Status diubah menjadi Ready to Design.");
-    setDesignSaving(false);
-  }
-
-  function saveDesignFile(item: CalendarItem) {
-    const value = designFileUrl.trim();
-    if (value && !/^https?:\/\//i.test(value)) {
-      setError("Link design harus diawali http:// atau https://");
-      return;
-    }
-    setDesignSaving(true);
-    const nextBrief = { ...item.brief, design_url: value, updated_at: new Date().toISOString() };
-    persistBrief(nextBrief);
-    setMessage(value ? "Link file design tersimpan." : "Link file design dihapus.");
-    setDesignSaving(false);
-  }
-
-  function goPreviousMonth() { setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)); }
-  function goNextMonth() { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)); }
-  function goToday() { const now = new Date(); setMonth(new Date(now.getFullYear(), now.getMonth(), 1)); }
-
-  return <section className="panel advanced-calendar">
-    <div className="calendar-toolbar">
-      <div><h2>Content Calendar</h2><p>Brief yang sudah lolos Human QC dan dijadwalkan otomatis muncul di sini untuk {activeBrand.name}.</p></div>
-      <div className="calendar-nav"><button className="ghost" onClick={goPreviousMonth}>← Bulan lalu</button><button className="ghost" onClick={goToday}>Hari ini</button><button className="ghost" onClick={goNextMonth}>Bulan berikut →</button></div>
-    </div>
-    {(message || error) && <div className="calendar-alerts">{message && <div className="calendar-success">{message}</div>}{error && <div className="calendar-error">{error}</div>}</div>}
-    <div className="calendar-workspace">
-      <div className="calendar-main">
-        <div className="calendar-month-head"><div><h3>{monthTitle(month)}</h3><span>{monthItems.length} content terjadwal bulan ini</span></div><span className="data-note">{items.length} scheduled</span></div>
-        <div className="calendar-weekdays">{weekdayLabels.map((label) => <div key={label}>{label}</div>)}</div>
-        <div className="calendar-grid">{calendarCells.map((cell, index) => {
-          if (!cell) return <div className="calendar-cell blank" key={`blank-${index}`} />;
-          const dayItems = itemsByDate.get(cell.dateString) || [];
-          const today = cell.dateString === localDateString(new Date());
-          return <div key={cell.dateString} className={`calendar-cell ${dragOverDate === cell.dateString ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragOverDate(cell.dateString); }} onDragLeave={() => { if (dragOverDate === cell.dateString) setDragOverDate(null); }} onDrop={(event) => onDayDrop(event, cell.dateString)}>
-            <div className="calendar-day-head"><span className={today ? "today" : ""}>{cell.dayNumber}</span>{dayItems.length > 0 && <small>{dayItems.length}</small>}</div>
-            <div className="calendar-day-items">{dayItems.map((item) => <article key={item.briefId} draggable onDragStart={(event) => onCardDragStart(event, item.briefId)} onDragEnd={() => { setDraggingId(null); setDragOverDate(null); }} onClick={() => chooseItem(item)} className={`calendar-card ${selectedId === item.briefId ? "selected" : ""} ${draggingId === item.briefId ? "dragging" : ""}`}>
-              <div className="calendar-card-top"><span>{item.brandName}</span>{movingId === item.briefId && <small>saving...</small>}</div>
-              <strong>{item.title}</strong>
-              <div className="calendar-pills"><span>{item.format}</span><span className={item.humanQcStatus === "approved" ? "qc-ok" : "qc-pending"}>{item.humanQcStatus === "approved" ? "QC ✓" : "QC ulang"}</span><span className={item.designStatus === "designed" ? "designed" : "ready"}>{item.designStatus === "designed" ? "Designed ✓" : "Ready to Design"}</span>{item.designFileUrl && <span className="file-pill">File ↗</span>}</div>
-            </article>)}</div>
-          </div>;
-        })}</div>
-      </div>
-      <aside className="calendar-side">
-        <div className="calendar-tip"><p>DRAG & DROP</p><h3>Geser jadwal langsung di calendar.</h3><span>Tarik kartu content ke tanggal lain. Perubahan langsung tersimpan ke workflow brief.</span></div>
-        <div className="calendar-detail"><h3>Quick Move</h3>{!selectedItem ? <p>Klik salah satu kartu content untuk memindahkan tanggal, mengubah design status, atau membuka Full Brief.</p> : <>
-          <small>{selectedItem.brandName}</small><strong className="selected-title">{selectedItem.title}</strong><p>Saat ini: {formatShortDate(selectedItem.scheduledFor)} · AI Quality {selectedItem.score}/100</p>
-          <input type="date" value={quickMoveDate} onChange={(event) => setQuickMoveDate(event.target.value)} />
-          <button className="primary calendar-full-btn" onClick={() => void moveBrief(selectedItem.briefId, quickMoveDate)} disabled={!quickMoveDate || movingId === selectedItem.briefId}>{movingId === selectedItem.briefId ? "Memindahkan..." : "Pindahkan Tanggal"}</button>
-          <div className="calendar-design"><div className="design-row"><div><small>DESIGN STATUS</small><b>{selectedItem.designStatus === "designed" ? "Designed ✓" : "Ready to Design"}</b></div><button className="ghost" disabled={designSaving} onClick={() => setDesignStatus(selectedItem, selectedItem.designStatus === "designed" ? "ready_to_design" : "designed")}>{selectedItem.designStatus === "designed" ? "Set Ready" : "Mark Designed"}</button></div>
-          <label>LINK FILE DESIGN</label><input type="url" value={designFileUrl} onChange={(event) => setDesignFileUrl(event.target.value)} placeholder="Canva / Drive / Figma / lainnya" />
-          <button className="ghost calendar-full-btn" disabled={designSaving} onClick={() => saveDesignFile(selectedItem)}>{designSaving ? "Menyimpan..." : "Simpan Link Design"}</button>
-          {selectedItem.designFileUrl && <a className="calendar-design-link" href={selectedItem.designFileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14}/> Buka File Design</a>}
-          </div>
-          <a className="calendar-open-brief" href={`/brief/${selectedItem.briefId}`}>Buka Full Brief →</a>
-        </>}</div>
-        <div className="calendar-workflow"><div><h3>Workflow</h3><span>{items.length} scheduled</span></div><p>1. Edit & urutkan slide di Full Brief.</p><p>2. Tandai <b>Lolos Human QC</b>.</p><p>3. Klik <b>Jadwalkan Brief</b>.</p><p>4. Brief otomatis masuk Calendar dan dapat digeser kapan pun.</p></div>
-      </aside>
-    </div>
-    {!items.length && <div className="empty-feature calendar-empty"><CalendarDays size={24}/><span>Belum ada brief yang lolos QC dan dijadwalkan untuk brand ini.</span></div>}
-  </section>;
+ function loadCalendar(){const social=loadAllBriefs().filter(b=>b.brand_id===activeBrand.id&&Boolean(b.scheduled_for)).map(socialItem).filter((x):x is CalendarItem=>Boolean(x));const expansions=loadExpansionCalendarItems().filter(x=>x.brand_id===activeBrand.id).map(expansionItem);const next=[...social,...expansions].sort((a,b)=>a.scheduledFor.localeCompare(b.scheduledFor));setItems(next);if(selectedId&&!next.some(x=>x.id===selectedId))setSelectedId(null)}
+ useEffect(()=>{loadCalendar();const onChange=()=>loadCalendar();window.addEventListener("storage",onChange);window.addEventListener("focus",onChange);window.addEventListener("proxsis:calendar-changed",onChange);return()=>{window.removeEventListener("storage",onChange);window.removeEventListener("focus",onChange);window.removeEventListener("proxsis:calendar-changed",onChange)}},[activeBrand.id]); // eslint-disable-line react-hooks/exhaustive-deps
+ const calendarCells=useMemo(()=>{const year=month.getFullYear(),mi=month.getMonth(),first=new Date(year,mi,1),days=new Date(year,mi+1,0).getDate(),leading=(first.getDay()+6)%7,total=Math.ceil((leading+days)/7)*7;return Array.from({length:total},(_,i)=>{const day=i-leading+1;if(day<1||day>days)return null;return{dateString:localDateString(new Date(year,mi,day)),dayNumber:day}})},[month]);
+ const itemsByDate=useMemo(()=>{const map=new Map<string,CalendarItem[]>();for(const item of items){const arr=map.get(item.scheduledFor)||[];arr.push(item);map.set(item.scheduledFor,arr)}return map},[items]);
+ const selectedItem=items.find(x=>x.id===selectedId)||null;
+ const prefix=`${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,"0")}`;
+ const monthItems=items.filter(x=>x.scheduledFor.startsWith(prefix));
+ function chooseItem(item:CalendarItem){setSelectedId(item.id);setQuickMoveDate(item.scheduledFor);setDesignFileUrl(item.designFileUrl||"");setMessage("");setError("")}
+ function persistSocial(next:BriefRecord){saveBrief(next);setItems(current=>current.map(item=>item.kind==="social"&&item.briefId===next.id?(socialItem(next)||item):item))}
+ async function moveItem(itemId:string,date:string){const current=items.find(x=>x.id===itemId);if(!current||!date||current.scheduledFor===date){setDraggingId(null);setDragOverDate(null);return}setMovingId(itemId);setMessage("");setError("");try{if(current.kind==="social"&&current.brief){persistSocial({...current.brief,scheduled_for:date,updated_at:new Date().toISOString()})}else{moveExpansionCalendarItem(current.id,date);setItems(list=>list.map(x=>x.id===current.id?{...x,scheduledFor:date}:x))}if(selectedId===itemId)setQuickMoveDate(date);setMessage(`Jadwal ${channelLabel(current.kind)} dipindahkan ke ${formatShortDate(date)}.`)}catch{setError("Gagal memindahkan jadwal.")}finally{setMovingId(null);setDraggingId(null);setDragOverDate(null)}}
+ function onDragStart(e:DragEvent<HTMLElement>,id:string){setDraggingId(id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",id)}
+ function onDrop(e:DragEvent<HTMLElement>,date:string){e.preventDefault();const id=e.dataTransfer.getData("text/plain")||draggingId;if(id)void moveItem(id,date)}
+ function setDesignStatus(item:CalendarItem,next:"ready_to_design"|"designed"){if(!item.brief)return;persistSocial({...item.brief,production_status:next,updated_at:new Date().toISOString()});setMessage(next==="designed"?"Status diubah menjadi Designed.":"Status diubah menjadi Ready to Design.")}
+ function saveDesignFile(item:CalendarItem){if(!item.brief)return;const value=designFileUrl.trim();if(value&&!/^https?:\/\//i.test(value)){setError("Link design harus diawali http:// atau https://");return}persistSocial({...item.brief,design_url:value,updated_at:new Date().toISOString()});setMessage(value?"Link file design tersimpan.":"Link file design dihapus.")}
+ function openHref(item:CalendarItem){return item.kind==="social"?`/brief/${item.briefId}`:`/brief/${item.briefId}/expansion/${item.kind}`}
+ return <section className="panel advanced-calendar">
+  <div className="calendar-toolbar"><div><h2>Content Calendar</h2><p>Social, LinkedIn, dan SEO/GEO content yang dijadwalkan muncul bersama untuk {activeBrand.name}.</p></div><div className="calendar-nav"><button className="ghost" onClick={()=>setMonth(m=>new Date(m.getFullYear(),m.getMonth()-1,1))}>← Bulan lalu</button><button className="ghost" onClick={()=>{const n=new Date();setMonth(new Date(n.getFullYear(),n.getMonth(),1))}}>Hari ini</button><button className="ghost" onClick={()=>setMonth(m=>new Date(m.getFullYear(),m.getMonth()+1,1))}>Bulan berikut →</button></div></div>
+  <div className="calendar-legend"><span className="channel-pill social">SOCIAL</span><span className="channel-pill linkedin">LINKEDIN</span><span className="channel-pill seo">SEO/GEO</span></div>
+  {(message||error)&&<div className="calendar-alerts">{message&&<div className="calendar-success">{message}</div>}{error&&<div className="calendar-error">{error}</div>}</div>}
+  <div className="calendar-workspace"><div className="calendar-main"><div className="calendar-month-head"><div><h3>{monthTitle(month)}</h3><span>{monthItems.length} content terjadwal bulan ini</span></div><span className="data-note">{items.length} scheduled</span></div><div className="calendar-weekdays">{weekdayLabels.map(x=><div key={x}>{x}</div>)}</div><div className="calendar-grid">{calendarCells.map((cell,index)=>{if(!cell)return <div className="calendar-cell blank" key={`blank-${index}`}/>;const dayItems=itemsByDate.get(cell.dateString)||[],today=cell.dateString===localDateString(new Date());return <div key={cell.dateString} className={`calendar-cell ${dragOverDate===cell.dateString?"drag-over":""}`} onDragOver={e=>{e.preventDefault();setDragOverDate(cell.dateString)}} onDragLeave={()=>{if(dragOverDate===cell.dateString)setDragOverDate(null)}} onDrop={e=>onDrop(e,cell.dateString)}><div className="calendar-day-head"><span className={today?"today":""}>{cell.dayNumber}</span>{dayItems.length>0&&<small>{dayItems.length}</small>}</div><div className="calendar-day-items">{dayItems.map(item=><article key={item.id} draggable onDragStart={e=>onDragStart(e,item.id)} onDragEnd={()=>{setDraggingId(null);setDragOverDate(null)}} onClick={()=>chooseItem(item)} className={`calendar-card ${selectedId===item.id?"selected":""} ${draggingId===item.id?"dragging":""}`}><div className="calendar-card-top"><span>{item.brandName}</span>{movingId===item.id&&<small>saving...</small>}</div><span className={`channel-pill ${item.kind==="social"?"social":item.kind==="linkedin"?"linkedin":"seo"}`}>{channelLabel(item.kind)}</span><strong>{item.title}</strong><div className="calendar-pills"><span>{item.format}</span>{item.kind==="social"&&<><span className={item.humanQcStatus==="approved"?"qc-ok":"qc-pending"}>{item.humanQcStatus==="approved"?"QC ✓":"QC ulang"}</span><span className={item.designStatus==="designed"?"designed":"ready"}>{item.designStatus==="designed"?"Designed ✓":"Ready to Design"}</span>{item.designFileUrl&&<span className="file-pill">File ↗</span>}</>}</div></article>)}</div></div>})}</div></div>
+   <aside className="calendar-side"><div className="calendar-tip"><p>MULTI-CHANNEL CALENDAR</p><h3>Satu kalender untuk seluruh content workflow.</h3><span>Social, LinkedIn, dan SEO/GEO dapat dijadwalkan dan digeser langsung antar tanggal.</span></div><div className="calendar-detail"><h3>Quick Move</h3>{!selectedItem?<p>Klik kartu untuk melihat detail dan memindahkan tanggal.</p>:<><span className={`channel-pill ${selectedItem.kind==="social"?"social":selectedItem.kind==="linkedin"?"linkedin":"seo"}`}>{channelLabel(selectedItem.kind)}</span><small>{selectedItem.brandName}</small><strong className="selected-title">{selectedItem.title}</strong><p>Saat ini: {formatShortDate(selectedItem.scheduledFor)}{selectedItem.score!==undefined?` · AI Quality ${selectedItem.score}/100`:""}</p><input type="date" value={quickMoveDate} onChange={e=>setQuickMoveDate(e.target.value)}/><button className="primary calendar-full-btn" onClick={()=>void moveItem(selectedItem.id,quickMoveDate)} disabled={!quickMoveDate||movingId===selectedItem.id}>{movingId===selectedItem.id?"Memindahkan...":"Pindahkan Tanggal"}</button>{selectedItem.kind==="social"&&<div className="calendar-design"><div className="design-row"><div><small>DESIGN STATUS</small><b>{selectedItem.designStatus==="designed"?"Designed ✓":"Ready to Design"}</b></div><button className="ghost" onClick={()=>setDesignStatus(selectedItem,selectedItem.designStatus==="designed"?"ready_to_design":"designed")}>{selectedItem.designStatus==="designed"?"Set Ready":"Mark Designed"}</button></div><label>LINK FILE DESIGN</label><input type="url" value={designFileUrl} onChange={e=>setDesignFileUrl(e.target.value)} placeholder="Canva / Drive / Figma / lainnya"/><button className="ghost calendar-full-btn" onClick={()=>saveDesignFile(selectedItem)}>Simpan Link Design</button>{selectedItem.designFileUrl&&<a className="calendar-design-link" href={selectedItem.designFileUrl} target="_blank" rel="noreferrer"><ExternalLink size={14}/> Buka File Design</a>}</div>}<a className="calendar-open-brief" href={openHref(selectedItem)}>{selectedItem.kind==="social"?"Buka Full Brief":"Buka Derivative Content"} →</a></>}</div><div className="calendar-workflow"><div><h3>Channel Labels</h3><span>{items.length} scheduled</span></div><p><b>SOCIAL</b> — master social brief.</p><p><b>LINKEDIN</b> — LinkedIn-native derivative.</p><p><b>SEO/GEO</b> — search & answer-engine content.</p></div></aside>
+  </div>
+  {!items.length&&<div className="empty-feature calendar-empty"><CalendarDays size={24}/><span>Belum ada content terjadwal untuk brand ini.</span></div>}
+ </section>
 }
