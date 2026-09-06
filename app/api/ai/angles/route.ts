@@ -21,7 +21,7 @@ export async function POST(request:Request){
   const body=(await request.json().catch(()=>({}))) as Partial<QuickBrief>;
   const input:QuickBrief={brandId:String(body.brandId??"").trim(),brandName:String(body.brandName??"").trim(),website:String(body.website??"").trim(),topic:String(body.topic??"").trim(),audience:String(body.audience??"").trim(),objective:String(body.objective??"").trim(),cta:String(body.cta??"").trim(),preferredFormat:body.preferredFormat??"auto",extraContext:String(body.extraContext??"").trim(),brandIntelligence:body.brandIntelligence??null};
   if(!input.brandName||!input.topic||!input.audience||!input.objective)return errorJson("Brand, topik/program, target audience, dan objective wajib terisi.");
-  if(!process.env.GEMINI_API_KEY?.trim())return errorJson("GEMINI_API_KEY belum dikonfigurasi.",503);
+  if(!process.env.DEEPSEEK_API_KEY?.trim())return errorJson("DEEPSEEK_API_KEY belum dikonfigurasi.",503);
   if(!process.env.TAVILY_API_KEY?.trim())return errorJson("TAVILY_API_KEY belum dikonfigurasi.",503);
 
   const knowledge=await loadStorytellingKnowledge();
