@@ -14,6 +14,7 @@ type Synthesis={brand_profile:{positioning:string;value_proposition:string;audie
 function errorJson(message:string,status=400){return NextResponse.json({ok:false,error:message},{status})}
 function sameOrigin(request:Request){const origin=request.headers.get("origin");const host=request.headers.get("x-forwarded-host")||request.headers.get("host");if(!origin||!host)return true;try{return new URL(origin).host===host}catch{return false}}
 function formatLabel(format:QuickBrief["preferredFormat"]){if(format==="carousel")return"Utamakan carousel.";if(format==="reels")return"Utamakan Reels.";if(format==="single_post")return"Utamakan single post.";return"Pilih format terbaik per angle berdasarkan kekuatan cerita."}
+function envDiagnostic(){const env=process.env.VERCEL_ENV||"unknown";const deployment=process.env.VERCEL_URL||process.env.VERCEL_PROJECT_PRODUCTION_URL||"unknown-deployment";const deepseek=Boolean(process.env.DEEPSEEK_API_KEY?.trim());const tavily=Boolean(process.env.TAVILY_API_KEY?.trim());return `env=${env}; deployment=${deployment}; DEEPSEEK_API_KEY=${deepseek?"available":"missing"}; TAVILY_API_KEY=${tavily?"available":"missing"}`}
 
 export async function POST(request:Request){
  try{
@@ -21,8 +22,8 @@ export async function POST(request:Request){
   const body=(await request.json().catch(()=>({}))) as Partial<QuickBrief>;
   const input:QuickBrief={brandId:String(body.brandId??"").trim(),brandName:String(body.brandName??"").trim(),website:String(body.website??"").trim(),topic:String(body.topic??"").trim(),audience:String(body.audience??"").trim(),objective:String(body.objective??"").trim(),cta:String(body.cta??"").trim(),preferredFormat:body.preferredFormat??"auto",extraContext:String(body.extraContext??"").trim(),brandIntelligence:body.brandIntelligence??null};
   if(!input.brandName||!input.topic||!input.audience||!input.objective)return errorJson("Brand, topik/program, target audience, dan objective wajib terisi.");
-  if(!process.env.DEEPSEEK_API_KEY?.trim())return errorJson("DEEPSEEK_API_KEY belum dikonfigurasi.",503);
-  if(!process.env.TAVILY_API_KEY?.trim())return errorJson("TAVILY_API_KEY belum dikonfigurasi.",503);
+  if(!process.env.DEEPSEEK_API_KEY?.trim())return errorJson(`DEEPSEEK_API_KEY belum tersedia pada deployment ini. ${envDiagnostic()}`,503);
+  if(!process.env.TAVILY_API_KEY?.trim())return errorJson(`TAVILY_API_KEY belum tersedia pada deployment ini. ${envDiagnostic()}`,503);
 
   const knowledge=await loadStorytellingKnowledge();
   const today=new Date().toISOString().slice(0,10);
