@@ -1,78 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { useActiveBrand } from "@/components/active-brand";
-import type { BrandIntelligence } from "@/lib/types";
+import {createContext,useContext,useEffect,useMemo,useState} from "react";
+import {useActiveBrand} from "@/components/active-brand";
+import {readSession} from "@/lib/access-control";
+import type {BrandIntelligence} from "@/lib/types";
 
-const STARTER_INTELLIGENCE: Record<string, BrandIntelligence> = {
-  "proxsis-consulting-group": {
-    positioning: "Strategic corporate learning and capability partner.",
-    value_proposition: "Menghubungkan kebutuhan bisnis dengan pengembangan kapabilitas organisasi.",
-    target_audiences: ["Business leaders", "HR leaders", "L&D professionals"],
-    audience_pain_points: ["Kesenjangan kapabilitas", "Program learning yang sulit diukur dampaknya"],
-    tone_of_voice: "Strategis, evidence-led, praktis.",
-    key_messages: ["Learning harus terhubung dengan business impact."],
-    brand_pov: "Corporate learning bukan sekadar training activity; harus menjadi business capability.",
-    core_expertise: ["Corporate learning", "Leadership", "Organizational capability"],
-    communication_dos: [],
-    communication_donts: [],
-  },
-};
-
-type BrandIntelligenceContextValue = {
-  intelligence: BrandIntelligence | null;
-  setIntelligence: (value: BrandIntelligence) => void;
-  clearIntelligence: () => void;
-  hasIntelligence: boolean;
-  source: "saved" | "starter" | "empty";
-};
-
-const BrandIntelligenceContext = createContext<BrandIntelligenceContextValue | null>(null);
-
-function storageKey(brandId: string) {
-  return `combined:brand-intelligence:${brandId}`;
-}
-
-export function BrandIntelligenceProvider({ children }: { children: React.ReactNode }) {
-  const { activeBrand } = useActiveBrand();
-  const [saved, setSaved] = useState<Record<string, BrandIntelligence | null>>({});
-  const [hydrated, setHydrated] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    if (hydrated[activeBrand.id]) return;
-    const raw = window.localStorage.getItem(storageKey(activeBrand.id));
-    let value: BrandIntelligence | null = null;
-    if (raw) {
-      try { value = JSON.parse(raw) as BrandIntelligence; } catch { value = null; }
-    }
-    setSaved(current => ({ ...current, [activeBrand.id]: value }));
-    setHydrated(current => ({ ...current, [activeBrand.id]: true }));
-  }, [activeBrand.id, hydrated]);
-
-  const starter = STARTER_INTELLIGENCE[activeBrand.id] ?? null;
-  const savedValue = saved[activeBrand.id] ?? null;
-  const intelligence = savedValue ?? starter;
-  const source: BrandIntelligenceContextValue["source"] = savedValue ? "saved" : starter ? "starter" : "empty";
-
-  const value = useMemo<BrandIntelligenceContextValue>(() => ({
-    intelligence,
-    hasIntelligence: Boolean(intelligence),
-    source,
-    setIntelligence: (next) => {
-      window.localStorage.setItem(storageKey(activeBrand.id), JSON.stringify(next));
-      setSaved(current => ({ ...current, [activeBrand.id]: next }));
-    },
-    clearIntelligence: () => {
-      window.localStorage.removeItem(storageKey(activeBrand.id));
-      setSaved(current => ({ ...current, [activeBrand.id]: null }));
-    },
-  }), [activeBrand.id, intelligence, source]);
-
-  return <BrandIntelligenceContext.Provider value={value}>{children}</BrandIntelligenceContext.Provider>;
-}
-
-export function useBrandIntelligence() {
-  const context = useContext(BrandIntelligenceContext);
-  if (!context) throw new Error("useBrandIntelligence must be used inside BrandIntelligenceProvider");
-  return context;
-}
+const STARTER_INTELLIGENCE:Record<string,BrandIntelligence>={"proxsis-consulting-group":{positioning:"Strategic corporate learning and capability partner.",value_proposition:"Menghubungkan kebutuhan bisnis dengan pengembangan kapabilitas organisasi.",target_audiences:["Business leaders","HR leaders","L&D professionals"],audience_pain_points:["Kesenjangan kapabilitas","Program learning yang sulit diukur dampaknya"],tone_of_voice:"Strategis, evidence-led, praktis.",key_messages:["Learning harus terhubung dengan business impact."],brand_pov:"Corporate learning bukan sekadar training activity; harus menjadi business capability.",core_expertise:["Corporate learning","Leadership","Organizational capability"],communication_dos:[],communication_donts:[]}};
+type ContextValue={intelligence:BrandIntelligence|null;setIntelligence:(value:BrandIntelligence)=>void;clearIntelligence:()=>void;hasIntelligence:boolean;source:"saved"|"starter"|"empty"};
+const Ctx=createContext<ContextValue|null>(null);const storageKey=(id:string)=>`combined:brand-intelligence:${id}`;const isUuid=(v:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+function remote(){const url=process.env.NEXT_PUBLIC_SUPABASE_URL||"",key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY||"",session=readSession();return{url,headers:{apikey:key,Authorization:`Bearer ${session?.access_token||key}`,"Content-Type":"application/json"}}}
+function fromRows(brand:any,g:any):BrandIntelligence{const intel=g?.visual_guideline?.brand_intelligence||{};return{market_industry:intel.market_industry||"",market_context:intel.market_context||"",market_trends:intel.market_trends||[],customer_segments:g?.customer_segments||[],positioning:brand?.positioning||intel.positioning||"",value_proposition:g?.value_proposition||brand?.description||"",target_audiences:g?.target_audiences||[],audience_pain_points:g?.audience_pain_points||[],differentiation:intel.differentiation||"",tone_of_voice:g?.tone_of_voice||"",key_messages:g?.key_messages||[],brand_pov:g?.brand_pov||"",core_expertise:g?.core_expertise||[],proof_points:intel.proof_points||[],allowed_claims:g?.allowed_claims||[],prohibited_claims:g?.prohibited_claims||[],communication_dos:g?.communication_dos||[],communication_donts:g?.communication_donts||[],source_files:intel.source_files||[],confidence_notes:intel.confidence_notes||[]}}
+async function fetchRemote(id:string){if(!isUuid(id))return null;const {url,headers}=remote();if(!url)return null;try{const [br,gr]=await Promise.all([fetch(`${url}/rest/v1/brands?select=id,positioning,description&id=eq.${id}`,{headers,cache:"no-store"}),fetch(`${url}/rest/v1/brand_guidelines?select=*&brand_id=eq.${id}`,{headers,cache:"no-store"})]);if(!br.ok||!gr.ok)return null;const brand=(await br.json())?.[0]||null,g=(await gr.json())?.[0]||null;if(!brand&&!g)return null;return fromRows(brand,g)}catch{return null}}
+async function syncRemote(id:string,value:BrandIntelligence){if(!isUuid(id))return;const {url,headers}=remote();if(!url)return;const visual={brand_intelligence:{market_industry:value.market_industry||"",market_context:value.market_context||"",market_trends:value.market_trends||[],positioning:value.positioning||"",differentiation:value.differentiation||"",proof_points:value.proof_points||[],source_files:value.source_files||[],confidence_notes:value.confidence_notes||[],updated_at:new Date().toISOString()}};try{await Promise.all([fetch(`${url}/rest/v1/brands?id=eq.${id}`,{method:"PATCH",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify({positioning:value.positioning||null,description:value.value_proposition||null,updated_at:new Date().toISOString()})}),fetch(`${url}/rest/v1/brand_guidelines?on_conflict=brand_id`,{method:"POST",headers:{...headers,Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({brand_id:id,customer_segments:value.customer_segments||[],target_audiences:value.target_audiences||[],audience_pain_points:value.audience_pain_points||[],value_proposition:value.value_proposition||null,tone_of_voice:value.tone_of_voice||null,key_messages:value.key_messages||[],brand_pov:value.brand_pov||null,core_expertise:value.core_expertise||[],allowed_claims:value.allowed_claims||[],prohibited_claims:value.prohibited_claims||[],communication_dos:value.communication_dos||[],communication_donts:value.communication_donts||[],visual_guideline:visual,updated_at:new Date().toISOString()})})])}catch{}}
+export function BrandIntelligenceProvider({children}:{children:React.ReactNode}){const {activeBrand}=useActiveBrand();const [saved,setSaved]=useState<Record<string,BrandIntelligence|null>>({});const [hydrated,setHydrated]=useState<Record<string,boolean>>({});useEffect(()=>{let cancelled=false;async function run(){if(hydrated[activeBrand.id])return;let value:BrandIntelligence|null=null;try{const raw=localStorage.getItem(storageKey(activeBrand.id));if(raw)value=JSON.parse(raw)}catch{}const remoteValue=await fetchRemote(activeBrand.id);if(cancelled)return;const finalValue=remoteValue||value;if(finalValue)localStorage.setItem(storageKey(activeBrand.id),JSON.stringify(finalValue));setSaved(c=>({...c,[activeBrand.id]:finalValue}));setHydrated(c=>({...c,[activeBrand.id]:true}))}void run();return()=>{cancelled=true}},[activeBrand.id,hydrated]);const starter=STARTER_INTELLIGENCE[activeBrand.id]??null,savedValue=saved[activeBrand.id]??null,intelligence=savedValue??starter,source:ContextValue["source"]=savedValue?"saved":starter?"starter":"empty";const value=useMemo<ContextValue>(()=>({intelligence,hasIntelligence:Boolean(intelligence),source,setIntelligence:(next)=>{localStorage.setItem(storageKey(activeBrand.id),JSON.stringify(next));setSaved(c=>({...c,[activeBrand.id]:next}));void syncRemote(activeBrand.id,next)},clearIntelligence:()=>{localStorage.removeItem(storageKey(activeBrand.id));setSaved(c=>({...c,[activeBrand.id]:null}))}}),[activeBrand.id,intelligence,source]);return <Ctx.Provider value={value}>{children}</Ctx.Provider>}
+export function useBrandIntelligence(){const c=useContext(Ctx);if(!c)throw new Error("useBrandIntelligence must be used inside BrandIntelligenceProvider");return c}
