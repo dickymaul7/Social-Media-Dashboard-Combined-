@@ -1,0 +1,4 @@
+"use client";
+import {useEffect,useState} from "react";
+import {hasPermission,type PermissionKey} from "@/lib/access-control";
+export default function PermissionGate({permission,children,fallback}:{permission:PermissionKey;children:React.ReactNode;fallback?:React.ReactNode}){const [allowed,setAllowed]=useState<boolean|null>(null);useEffect(()=>{let active=true;void hasPermission(permission).then(value=>{if(active)setAllowed(value)});return()=>{active=false}},[permission]);if(allowed===null)return <div style={{padding:24,color:"#756b70"}}>Checking permission...</div>;if(!allowed)return <>{fallback??<div style={{padding:24,border:"1px solid #eed7dc",borderRadius:14,background:"#fff7f8",color:"#8b2439"}}>Akun ini tidak memiliki permission <strong>{permission}</strong>.</div>}</>;return <>{children}</>}
