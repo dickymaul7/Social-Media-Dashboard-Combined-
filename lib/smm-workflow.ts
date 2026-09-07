@@ -11,63 +11,22 @@ export type BriefRecord={id:string;campaign_id:string;idea_id:string;brand_id:st
 const campaignKey=(id:string)=>`proxsis-smm:campaign:${id}`;const campaignIndexKey="proxsis-smm:campaign-index:v1";const briefKey=(id:string)=>`proxsis-smm:brief:${id}`;const briefIndexKey="proxsis-smm:brief-index:v1";
 function readIds(key:string):string[]{if(typeof window==="undefined")return[];try{const parsed=JSON.parse(window.localStorage.getItem(key)||"[]");return Array.isArray(parsed)?parsed.filter((id):id is string=>typeof id==="string"):[]}catch{return[]}}
 function writeIds(key:string,ids:string[]){if(typeof window==="undefined")return;window.localStorage.setItem(key,JSON.stringify(ids))}
-function saveCampaignLocal(bundle:CampaignBundle){if(typeof window==="undefined")return;window.localStorage.setItem(campaignKey(bundle.campaign.id),JSON.stringify(bundle));const ids=loadCampaignIds();writeIds(campaignIndexKey,[bundle.campaign.id,...ids.filter(id=>id!==bundle.campaign.id)].slice(0,100))}
+function saveCampaignLocal(bundle:CampaignBundle){if(typeof window==="undefined")return;window.localStorage.setItem(campaignKey(bundle.campaign.id),JSON.stringify(bundle));const ids=loadCampaignIds();writeIds(campaignIndexKey,[bundle.campaign.id,...ids.filter(id=>id!==bundle.campaign.id)].slice(0,500))}
 export function saveCampaign(bundle:CampaignBundle){saveCampaignLocal(bundle);void syncWorkspaceRecord("smm_campaigns",{id:bundle.campaign.id,brand_id:bundle.campaign.brand_id,payload:bundle,created_at:bundle.campaign.created_at})}
 export function loadCampaign(id:string):CampaignBundle|null{if(typeof window==="undefined")return null;try{const raw=window.localStorage.getItem(campaignKey(id));return raw?JSON.parse(raw):null}catch{return null}}
 export function loadCampaignIds():string[]{return readIds(campaignIndexKey)}
 export function loadAllCampaigns():CampaignBundle[]{return loadCampaignIds().map(loadCampaign).filter((x):x is CampaignBundle=>Boolean(x)).sort((a,b)=>b.campaign.created_at.localeCompare(a.campaign.created_at))}
 export function loadCampaignsForBrand(brandId:string):CampaignBundle[]{return loadAllCampaigns().filter(bundle=>bundle.campaign.brand_id===brandId)}
 export async function hydrateCampaignsFromSupabase(brandId:string){const rows=await fetchWorkspaceRows<{payload:CampaignBundle}>("smm_campaigns",`select=payload&brand_id=eq.${encodeURIComponent(brandId)}&order=created_at.desc&limit=100`);for(const row of rows)if(row?.payload?.campaign?.id)saveCampaignLocal(row.payload);return loadCampaignsForBrand(brandId)}
+export async function hydrateAllCampaignsFromSupabase(){const rows=await fetchWorkspaceRows<{payload:CampaignBundle}>("smm_campaigns","select=payload&order=created_at.desc&limit=500");for(const row of rows)if(row?.payload?.campaign?.id)saveCampaignLocal(row.payload);return loadAllCampaigns()}
 function normalizeBrief(brief:BriefRecord){return brief.human_qc==="approved"&&Boolean(brief.scheduled_for)&&brief.production_status!=="designed"?{...brief,production_status:"ready_to_design" as const}:brief}
-function saveBriefLocal(brief:BriefRecord){if(typeof window==="undefined")return;window.localStorage.setItem(briefKey(brief.id),JSON.stringify(brief));const ids=loadBriefIds();writeIds(briefIndexKey,[brief.id,...ids.filter(id=>id!==brief.id)].slice(0,200));window.dispatchEvent(new CustomEvent("proxsis-smm:brief-updated",{detail:{briefId:brief.id}}))}
+function saveBriefLocal(brief:BriefRecord){if(typeof window==="undefined")return;window.localStorage.setItem(briefKey(brief.id),JSON.stringify(brief));const ids=loadBriefIds();writeIds(briefIndexKey,[brief.id,...ids.filter(id=>id!==brief.id)].slice(0,1000));window.dispatchEvent(new CustomEvent("proxsis-smm:brief-updated",{detail:{briefId:brief.id}}))}
 export function saveBrief(brief:BriefRecord){const normalized=normalizeBrief(brief);saveBriefLocal(normalized);void syncWorkspaceRecord("smm_briefs",{id:normalized.id,brand_id:normalized.brand_id,campaign_id:normalized.campaign_id,payload:normalized,updated_at:normalized.updated_at})}
 export function loadBrief(id:string):BriefRecord|null{if(typeof window==="undefined")return null;try{const raw=window.localStorage.getItem(briefKey(id));return raw?JSON.parse(raw):null}catch{return null}}
 export function loadBriefIds():string[]{return readIds(briefIndexKey)}
 export function loadAllBriefs():BriefRecord[]{return loadBriefIds().map(loadBrief).filter((x):x is BriefRecord=>Boolean(x))}
 export async function hydrateBriefsFromSupabase(brandId:string){const rows=await fetchWorkspaceRows<{payload:BriefRecord}>("smm_briefs",`select=payload&brand_id=eq.${encodeURIComponent(brandId)}&order=updated_at.desc&limit=200`);for(const row of rows)if(row?.payload?.id)saveBriefLocal(row.payload);return loadAllBriefs().filter(b=>b.brand_id===brandId)}
+export async function hydrateAllBriefsFromSupabase(){const rows=await fetchWorkspaceRows<{payload:BriefRecord}>("smm_briefs","select=payload&order=updated_at.desc&limit=1000");for(const row of rows)if(row?.payload?.id)saveBriefLocal(row.payload);return loadAllBriefs()}
 
 function sameBrandName(a:unknown,b:unknown){return String(a||"").trim().toLocaleLowerCase()===String(b||"").trim().toLocaleLowerCase()}
-
-/**
- * Migrates pre-Supabase Combined records that used slug brand IDs to the UUID used by
- * the shared SMM Simplified `brands` table. Matching is deliberately based on exact
- * normalized brand name; unrelated brands are never reassigned.
- */
-export async function reconcileLegacyBrandIdentity(brandId:string,brandName:string){
-  if(typeof window==="undefined"||!brandId||!brandName)return {campaigns:0,briefs:0};
-  let campaigns=0;let briefs=0;
-
-  for(const bundle of loadAllCampaigns()){
-    if(bundle.campaign.brand_id!==brandId&&sameBrandName(bundle.campaign.brand_name,brandName)){
-      const next:CampaignBundle={...bundle,campaign:{...bundle.campaign,brand_id:brandId,brand_name:brandName}};
-      saveCampaignLocal(next);
-      await syncWorkspaceRecord("smm_campaigns",{id:next.campaign.id,brand_id:brandId,payload:next,created_at:next.campaign.created_at});
-      campaigns++;
-    }
-  }
-  for(const brief of loadAllBriefs()){
-    if(brief.brand_id!==brandId&&sameBrandName(brief.brand_name,brandName)){
-      const next:BriefRecord={...brief,brand_id:brandId,brand_name:brandName,updated_at:brief.updated_at||new Date().toISOString()};
-      saveBriefLocal(next);
-      await syncWorkspaceRecord("smm_briefs",{id:next.id,brand_id:brandId,campaign_id:next.campaign_id,payload:next,updated_at:next.updated_at});
-      briefs++;
-    }
-  }
-
-  // Also recover records that may already have been synced remotely under the legacy slug.
-  const [remoteCampaigns,remoteBriefs]=await Promise.all([
-    fetchWorkspaceRows<{id:string;brand_id:string|null;payload:CampaignBundle;created_at:string}>("smm_campaigns","select=id,brand_id,payload,created_at&limit=200"),
-    fetchWorkspaceRows<{id:string;brand_id:string|null;campaign_id:string;payload:BriefRecord;updated_at:string}>("smm_briefs","select=id,brand_id,campaign_id,payload,updated_at&limit=400")
-  ]);
-  for(const row of remoteCampaigns){
-    const bundle=row?.payload;if(!bundle?.campaign?.id||row.brand_id===brandId||!sameBrandName(bundle.campaign.brand_name,brandName))continue;
-    const next:CampaignBundle={...bundle,campaign:{...bundle.campaign,brand_id:brandId,brand_name:brandName}};
-    saveCampaignLocal(next);await syncWorkspaceRecord("smm_campaigns",{id:row.id,brand_id:brandId,payload:next,created_at:row.created_at||next.campaign.created_at});campaigns++;
-  }
-  for(const row of remoteBriefs){
-    const brief=row?.payload;if(!brief?.id||row.brand_id===brandId||!sameBrandName(brief.brand_name,brandName))continue;
-    const next:BriefRecord={...brief,brand_id:brandId,brand_name:brandName};
-    saveBriefLocal(next);await syncWorkspaceRecord("smm_briefs",{id:row.id,brand_id:brandId,campaign_id:row.campaign_id||next.campaign_id,payload:next,updated_at:row.updated_at||next.updated_at});briefs++;
-  }
-  return {campaigns,briefs};
-}
+export async function reconcileLegacyBrandIdentity(brandId:string,brandName:string){if(typeof window==="undefined"||!brandId||!brandName)return{campaigns:0,briefs:0};let campaigns=0;let briefs=0;for(const bundle of loadAllCampaigns()){if(bundle.campaign.brand_id!==brandId&&sameBrandName(bundle.campaign.brand_name,brandName)){const next:CampaignBundle={...bundle,campaign:{...bundle.campaign,brand_id:brandId,brand_name:brandName}};saveCampaignLocal(next);await syncWorkspaceRecord("smm_campaigns",{id:next.campaign.id,brand_id:brandId,payload:next,created_at:next.campaign.created_at});campaigns++}}for(const brief of loadAllBriefs()){if(brief.brand_id!==brandId&&sameBrandName(brief.brand_name,brandName)){const next:BriefRecord={...brief,brand_id:brandId,brand_name:brandName,updated_at:brief.updated_at||new Date().toISOString()};saveBriefLocal(next);await syncWorkspaceRecord("smm_briefs",{id:next.id,brand_id:brandId,campaign_id:next.campaign_id,payload:next,updated_at:next.updated_at});briefs++}}const[remoteCampaigns,remoteBriefs]=await Promise.all([fetchWorkspaceRows<{id:string;brand_id:string|null;payload:CampaignBundle;created_at:string}>("smm_campaigns","select=id,brand_id,payload,created_at&limit=500"),fetchWorkspaceRows<{id:string;brand_id:string|null;campaign_id:string;payload:BriefRecord;updated_at:string}>("smm_briefs","select=id,brand_id,campaign_id,payload,updated_at&limit=1000")]);for(const row of remoteCampaigns){const bundle=row?.payload;if(!bundle?.campaign?.id||row.brand_id===brandId||!sameBrandName(bundle.campaign.brand_name,brandName))continue;const next:CampaignBundle={...bundle,campaign:{...bundle.campaign,brand_id:brandId,brand_name:brandName}};saveCampaignLocal(next);await syncWorkspaceRecord("smm_campaigns",{id:row.id,brand_id:brandId,payload:next,created_at:row.created_at||next.campaign.created_at});campaigns++}for(const row of remoteBriefs){const brief=row?.payload;if(!brief?.id||row.brand_id===brandId||!sameBrandName(brief.brand_name,brandName))continue;const next:BriefRecord={...brief,brand_id:brandId,brand_name:brandName};saveBriefLocal(next);await syncWorkspaceRecord("smm_briefs",{id:row.id,brand_id:brandId,campaign_id:row.campaign_id||next.campaign_id,payload:next,updated_at:row.updated_at||next.updated_at});briefs++}return{campaigns,briefs}}
