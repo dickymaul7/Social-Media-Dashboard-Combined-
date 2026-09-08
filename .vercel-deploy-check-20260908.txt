@@ -1,0 +1,1 @@
+Vercel deployment check triggered on 2026-09-08. No application logic changed.
