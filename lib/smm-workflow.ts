@@ -17,6 +17,7 @@ export function loadCampaign(id:string):CampaignBundle|null{if(typeof window==="
 export function loadCampaignIds():string[]{return readIds(campaignIndexKey)}
 export function loadAllCampaigns():CampaignBundle[]{return loadCampaignIds().map(loadCampaign).filter((x):x is CampaignBundle=>Boolean(x)).sort((a,b)=>b.campaign.created_at.localeCompare(a.campaign.created_at))}
 export function loadCampaignsForBrand(brandId:string):CampaignBundle[]{return loadAllCampaigns().filter(bundle=>bundle.campaign.brand_id===brandId)}
+export async function hydrateCampaignFromSupabase(id:string){const rows=await fetchWorkspaceRows<{payload:CampaignBundle}>("smm_campaigns",`select=payload&id=eq.${encodeURIComponent(id)}&limit=1`);const bundle=rows[0]?.payload||null;if(bundle?.campaign?.id)saveCampaignLocal(bundle);return bundle}
 export async function hydrateCampaignsFromSupabase(brandId:string){const rows=await fetchWorkspaceRows<{payload:CampaignBundle}>("smm_campaigns",`select=payload&brand_id=eq.${encodeURIComponent(brandId)}&order=created_at.desc&limit=100`);for(const row of rows)if(row?.payload?.campaign?.id)saveCampaignLocal(row.payload);return loadCampaignsForBrand(brandId)}
 export async function hydrateAllCampaignsFromSupabase(){const rows=await fetchWorkspaceRows<{payload:CampaignBundle}>("smm_campaigns","select=payload&order=created_at.desc&limit=500");for(const row of rows)if(row?.payload?.campaign?.id)saveCampaignLocal(row.payload);return loadAllCampaigns()}
 function normalizeBrief(brief:BriefRecord){return brief.human_qc==="approved"&&Boolean(brief.scheduled_for)&&brief.production_status!=="designed"?{...brief,production_status:"ready_to_design" as const}:brief}
@@ -25,6 +26,7 @@ export function saveBrief(brief:BriefRecord){const normalized=normalizeBrief(bri
 export function loadBrief(id:string):BriefRecord|null{if(typeof window==="undefined")return null;try{const raw=window.localStorage.getItem(briefKey(id));return raw?JSON.parse(raw):null}catch{return null}}
 export function loadBriefIds():string[]{return readIds(briefIndexKey)}
 export function loadAllBriefs():BriefRecord[]{return loadBriefIds().map(loadBrief).filter((x):x is BriefRecord=>Boolean(x))}
+export async function hydrateBriefFromSupabase(id:string){const rows=await fetchWorkspaceRows<{payload:BriefRecord}>("smm_briefs",`select=payload&id=eq.${encodeURIComponent(id)}&limit=1`);const brief=rows[0]?.payload||null;if(brief?.id)saveBriefLocal(brief);return brief}
 export async function hydrateBriefsFromSupabase(brandId:string){const rows=await fetchWorkspaceRows<{payload:BriefRecord}>("smm_briefs",`select=payload&brand_id=eq.${encodeURIComponent(brandId)}&order=updated_at.desc&limit=200`);for(const row of rows)if(row?.payload?.id)saveBriefLocal(row.payload);return loadAllBriefs().filter(b=>b.brand_id===brandId)}
 export async function hydrateAllBriefsFromSupabase(){const rows=await fetchWorkspaceRows<{payload:BriefRecord}>("smm_briefs","select=payload&order=updated_at.desc&limit=1000");for(const row of rows)if(row?.payload?.id)saveBriefLocal(row.payload);return loadAllBriefs()}
 
