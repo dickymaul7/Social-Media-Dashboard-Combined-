@@ -1,0 +1,208 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { loadAllBriefs, saveBrief, type BriefRecord } from "@/lib/smm-workflow";
+
+const SESSION_KEY = "proxsis-auth:session:v1";
+const MEDIA_BUCKET = "smm-publisher-media";
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_TYPES = new Set(["image/jpeg","image/png","image/webp","video/mp4","video/quicktime"]);
+
+type BufferChannel = {
+  id: string;
+  name: string;
+  displayName?: string | null;
+  service?: string;
+  timezone?: string;
+  isDisconnected?: boolean;
+  isLocked?: boolean;
+};
+
+type Diagnostics = {
+  organizationCount?: number;
+  declaredChannelCount?: number;
+  returnedChannelCount?: number;
+  activeChannelCount?: number;
+  services?: string[];
+};
+
+function getAccessToken() {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    const session = raw ? JSON.parse(raw) : null;
+    return String(session?.access_token || "");
+  } catch {
+    return "";
+  }
+}
+
+function authHeaders(extra: Record<string,string> = {}) {
+  const token = getAccessToken();
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+}
+
+function safeFileName(name: string) {
+  const parts = name.split(".");
+  const extension = parts.length > 1 ? `.${parts.pop()}` : "";
+  const base = parts.join(".") || "media";
+  return `${base.toLowerCase().replace(/[^a-z0-9-_]+/g,"-").replace(/^-+|-+$/g,"") || "media"}${extension.toLowerCase()}`;
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1,Math.round(bytes/1024))} KB`;
+  return `${(bytes/(1024*1024)).toFixed(1)} MB`;
+}
+
+function defaultCaption(brief: BriefRecord) {
+  return [brief.working_title, brief.core_insight, brief.brand_pov, brief.cta]
+    .map(value => String(value || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function findPortalTarget() {
+  return document.querySelector<HTMLElement>(".calendar-detail");
+}
+
+export default function BufferInstagramPublisher() {
+  const [target,setTarget] = useState<HTMLElement|null>(null);
+  const [brief,setBrief] = useState<BriefRecord|null>(null);
+  const [channels,setChannels] = useState<BufferChannel[]>([]);
+  const [channelId,setChannelId] = useState("");
+  const [caption,setCaption] = useState("");
+  const [mediaFile,setMediaFile] = useState<File|null>(null);
+  const [mediaUrl,setMediaUrl] = useState("");
+  const [publishDate,setPublishDate] = useState("");
+  const [publishTime,setPublishTime] = useState("09:00");
+  const [diagnostics,setDiagnostics] = useState<Diagnostics|null>(null);
+  const [loadingChannels,setLoadingChannels] = useState(false);
+  const [scheduling,setScheduling] = useState(false);
+  const [message,setMessage] = useState("");
+  const [error,setError] = useState("");
+
+  useEffect(()=>{
+    let disposed=false;
+    const resolve=()=>{if(disposed)return;const node=findPortalTarget();if(node){setTarget(node);return}requestAnimationFrame(resolve)};
+    resolve();
+    return()=>{disposed=true};
+  },[]);
+
+  async function loadChannels() {
+    setLoadingChannels(true);setError("");
+    try {
+      const response = await fetch("/api/buffer/channels",{headers:authHeaders(),cache:"no-store"});
+      const payload = await response.json().catch(()=>({}));
+      if(!response.ok||!payload?.ok) throw new Error(payload?.error||"Gagal memuat channel Buffer.");
+      const rows=(payload.channels||[]) as BufferChannel[];
+      setChannels(rows);
+      setDiagnostics(payload.diagnostics||null);
+      if(rows.length===1)setChannelId(rows[0].id);
+    } catch(err) {
+      setError(err instanceof Error?err.message:"Gagal memuat channel Buffer.");
+    } finally {setLoadingChannels(false)}
+  }
+
+  useEffect(()=>{void loadChannels()},[]);
+
+  useEffect(()=>{
+    const click=(event:MouseEvent)=>{
+      const card=(event.target as HTMLElement|null)?.closest<HTMLElement>(".calendar-card");
+      if(!card)return;
+      const channel=card.querySelector<HTMLElement>(".channel-pill")?.textContent?.trim().toUpperCase();
+      if(channel!=="SOCIAL") {setBrief(null);return}
+      const title=Array.from(card.querySelectorAll("strong")).map(x=>x.textContent?.trim()).find(Boolean)||"";
+      if(!title)return;
+      const candidates=loadAllBriefs().filter(item=>item.working_title.trim()===title.trim());
+      const selected=candidates[0]||null;
+      setBrief(selected);
+      if(selected){setCaption(defaultCaption(selected));setPublishDate(selected.scheduled_for||"");setMediaUrl(selected.design_url||"");setMediaFile(null)}
+      setMessage("");setError("");
+    };
+    document.addEventListener("click",click);
+    return()=>document.removeEventListener("click",click);
+  },[]);
+
+  const mediaType = useMemo<"image"|"video">(()=>mediaFile?.type.startsWith("video/")||/\.(mp4|mov)(\?|#|$)/i.test(mediaUrl)?"video":"image",[mediaFile,mediaUrl]);
+
+  function selectFile(file:File|null) {
+    setMessage("");setError("");
+    if(!file){setMediaFile(null);return}
+    if(!ALLOWED_TYPES.has(file.type)){setError("Format file belum didukung. Gunakan JPG, PNG, WEBP, MP4, atau MOV.");return}
+    if(file.size>MAX_FILE_BYTES){setError("Ukuran file maksimal 50 MB.");return}
+    setMediaFile(file);
+  }
+
+  async function uploadMedia(activeBrief:BriefRecord) {
+    if(!mediaFile)return mediaUrl.trim();
+    const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const token=getAccessToken();
+    if(!url||!anon)throw new Error("Supabase belum dikonfigurasi di Combined.");
+    if(!token)throw new Error("Session login tidak valid.");
+    const userRes=await fetch(`${url}/auth/v1/user`,{headers:{apikey:anon,Authorization:`Bearer ${token}`}});
+    const user=await userRes.json().catch(()=>({}));
+    if(!userRes.ok||!user?.id)throw new Error("Session login tidak valid.");
+    const path=`${user.id}/${activeBrief.id}/${Date.now()}-${safeFileName(mediaFile.name)}`;
+    const uploadRes=await fetch(`${url}/storage/v1/object/${MEDIA_BUCKET}/${path}`,{
+      method:"POST",
+      headers:{apikey:anon,Authorization:`Bearer ${token}`,"Content-Type":mediaFile.type,"x-upsert":"false"},
+      body:mediaFile,
+    });
+    const uploadPayload=await uploadRes.json().catch(()=>({}));
+    if(!uploadRes.ok)throw new Error(uploadPayload?.message||uploadPayload?.error||"Upload media gagal.");
+    const publicUrl=`${url}/storage/v1/object/public/${MEDIA_BUCKET}/${path}`;
+    const next={...activeBrief,production_status:"designed" as const,design_url:publicUrl,updated_at:new Date().toISOString()};
+    saveBrief(next);
+    setBrief(next);setMediaUrl(publicUrl);setMediaFile(null);
+    return publicUrl;
+  }
+
+  async function schedule() {
+    if(!brief){setError("Klik kartu SOCIAL di Calendar terlebih dahulu.");return}
+    if(brief.human_qc!=="approved"){setError("Human QC harus approved sebelum dijadwalkan ke Instagram.");return}
+    if(!channelId){setError("Pilih akun Instagram Buffer terlebih dahulu.");return}
+    if(!publishDate||!publishTime){setError("Pilih tanggal dan jam publish terlebih dahulu.");return}
+    if(!mediaFile&&!mediaUrl.trim()){setError("Upload file design/video terlebih dahulu.");return}
+    setScheduling(true);setMessage("");setError("");
+    try {
+      const finalMediaUrl=await uploadMedia(brief);
+      if(!finalMediaUrl)throw new Error("Media belum tersedia.");
+      const dueAt=new Date(`${publishDate}T${publishTime}:00+07:00`).toISOString();
+      const response=await fetch("/api/buffer/schedule",{
+        method:"POST",
+        headers:authHeaders({"Content-Type":"application/json"}),
+        body:JSON.stringify({channelId,text:caption,dueAt,mediaUrl:finalMediaUrl,mediaType}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Scheduling Buffer gagal.");
+      const next={...brief,scheduled_for:publishDate,production_status:"designed" as const,design_url:finalMediaUrl,updated_at:new Date().toISOString()};
+      saveBrief(next);setBrief(next);
+      setMessage(`Scheduled to Instagram ✓ · ${publishDate} ${publishTime} WIB`);
+      window.dispatchEvent(new Event("proxsis:calendar-changed"));
+    } catch(err) {setError(err instanceof Error?err.message:"Scheduling Instagram gagal.")} finally {setScheduling(false)}
+  }
+
+  if(!target)return null;
+  const activeService=channels.find(x=>x.id===channelId)?.service||"";
+  return createPortal(<div style={{borderTop:"1px solid #e7dfe2",marginTop:18,paddingTop:18}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><div><div style={{fontSize:11,fontWeight:800,letterSpacing:".08em",color:"#8b777e"}}>INSTAGRAM PUBLISHER</div><div style={{fontSize:16,fontWeight:800,marginTop:3}}>Schedule via Buffer</div></div><span style={{fontSize:10,fontWeight:800,color:"#a3152d",background:"#fff0f1",padding:"6px 9px",borderRadius:999}}>Instagram</span></div>
+    {!brief?<p style={{fontSize:12,color:"#756b70",lineHeight:1.6}}>Klik kartu <b>SOCIAL</b> di Calendar untuk membuka publisher.</p>:<div style={{display:"grid",gap:12,marginTop:14}}>
+      <div style={{border:"1px solid #e7dfe2",borderRadius:12,padding:12,background:"#fff"}}><div style={{fontSize:10,fontWeight:800,color:"#8b777e",letterSpacing:".06em"}}>SELECTED CONTENT</div><div style={{fontSize:12,fontWeight:800,lineHeight:1.45,marginTop:5}}>{brief.working_title}</div><div style={{fontSize:11,color:"#756b70",marginTop:6}}>QC {brief.human_qc==="approved"?"Approved ✓":"Pending"}</div></div>
+      <label style={labelStyle}>INSTAGRAM ACCOUNT<select value={channelId} onChange={e=>setChannelId(e.target.value)} disabled={loadingChannels} style={inputStyle}><option value="">{loadingChannels?"Loading Buffer...":"Pilih akun Instagram"}</option>{channels.map(channel=><option key={channel.id} value={channel.id}>{channel.displayName||channel.name}</option>)}</select></label>
+      {diagnostics&&<div style={{fontSize:10,color:"#756b70",lineHeight:1.5}}>Buffer connected · {diagnostics.organizationCount||0} organization · {diagnostics.returnedChannelCount||0} channel · {activeService||diagnostics.services?.join(", ")||"service unknown"}</div>}
+      <label style={labelStyle}>UPLOAD DESIGN / VIDEO<span style={{display:"grid",placeItems:"center",textAlign:"center",border:"1px dashed #d9cdd2",borderRadius:12,padding:"16px 12px",cursor:"pointer",background:"#fff"}}><input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" style={{display:"none"}} onChange={e=>selectFile(e.target.files?.[0]||null)}/><b style={{fontSize:12}}>{mediaFile?mediaFile.name:"Pilih JPG / PNG / WEBP / MP4 / MOV"}</b><span style={{fontSize:10,color:"#756b70",marginTop:5}}>{mediaFile?formatSize(mediaFile.size):"Maks. 50 MB · upload otomatis saat scheduling"}</span></span></label>
+      {!mediaFile&&mediaUrl&&<div style={{fontSize:10,color:"#147a4d"}}>Media final tersimpan dan siap digunakan kembali.</div>}
+      <label style={labelStyle}>CAPTION<textarea value={caption} onChange={e=>setCaption(e.target.value)} rows={7} style={{...inputStyle,resize:"vertical",lineHeight:1.55}}/></label>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><label style={labelStyle}>PUBLISH DATE<input type="date" value={publishDate} onChange={e=>setPublishDate(e.target.value)} style={inputStyle}/></label><label style={labelStyle}>PUBLISH TIME (WIB)<input type="time" value={publishTime} onChange={e=>setPublishTime(e.target.value)} style={inputStyle}/></label></div>
+      {message&&<div style={{background:"#eaf7f0",color:"#146c43",padding:11,borderRadius:10,fontSize:12,lineHeight:1.5}}>{message}</div>}
+      {error&&<div style={{background:"#fff0f1",color:"#a3152d",padding:11,borderRadius:10,fontSize:12,lineHeight:1.5}}>{error}</div>}
+      <button onClick={schedule} disabled={scheduling||loadingChannels} style={{border:0,borderRadius:10,padding:"12px 14px",background:"#DE0016",color:"white",fontWeight:800,cursor:"pointer",opacity:scheduling?.65:1}}>{scheduling?"Uploading & Scheduling...":"Schedule to Instagram"}</button>
+      <div style={{fontSize:10,color:"#756b70",lineHeight:1.55}}>Combined meng-upload media ke Supabase Storage, mengirim caption + waktu ke Buffer, lalu Buffer menjadwalkannya ke Instagram.</div>
+    </div>}
+  </div>,target);
+}
+
+const labelStyle:React.CSSProperties={display:"grid",gap:7,fontSize:10,fontWeight:800,letterSpacing:".05em",color:"#7a666d"};
+const inputStyle:React.CSSProperties={width:"100%",boxSizing:"border-box",border:"1px solid #d9cdd2",borderRadius:10,padding:"10px 11px",fontSize:12,color:"#251f21",background:"white",outline:"none"};
