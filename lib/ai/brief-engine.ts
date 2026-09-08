@@ -2,31 +2,111 @@ import { average, clampScore, compactJson, createStructuredJson } from "@/lib/ai
 import { briefSchema, qualitySchema } from "@/lib/ai/schemas";
 
 export type BriefOutput = {
-  content_objective:string;target_audience:string;funnel_stage:"awareness"|"consideration"|"conversion";editorial_thesis:string;case_evidence:string;why_this_case:string;tension:string;core_insight:string;brand_pov:string;capability_bridge:string;story_arc:string;cta:string;fact_check_notes:string;
-  sections:Array<{sequence_no:number;section_type:"slide"|"scene";purpose:string;headline:string;supporting_copy:string;evidence_needed:string;visual_direction:string;transition_to_next:string}>;
+  content_objective: string;
+  target_audience: string;
+  funnel_stage: "awareness" | "consideration" | "conversion";
+  editorial_thesis: string;
+  case_evidence: string;
+  why_this_case: string;
+  tension: string;
+  core_insight: string;
+  brand_pov: string;
+  capability_bridge: string;
+  story_arc: string;
+  cta: string;
+  fact_check_notes: string;
+  sections: Array<{
+    sequence_no: number;
+    section_type: "slide" | "scene";
+    purpose: string;
+    headline: string;
+    supporting_copy: string;
+    evidence_needed: string;
+    visual_direction: string;
+    transition_to_next: string;
+  }>;
 };
-export type QualityReview={case_strength:number;hook_strength:number;tension:number;insight_depth:number;mechanism_clarity:number;audience_relevance:number;brand_fit:number;brand_pov:number;story_flow:number;non_generic_score:number;conversion_naturalness:number;evidence_safety:number;reviewer_notes:string;required_revisions:string[]};
-const qualityKeys:Array<keyof Omit<QualityReview,"reviewer_notes"|"required_revisions">>=["case_strength","hook_strength","tension","insight_depth","mechanism_clarity","audience_relevance","brand_fit","brand_pov","story_flow","non_generic_score","conversion_naturalness","evidence_safety"];
-export function reviewTotal(review:QualityReview){return average(qualityKeys.map(key=>clampScore(Number(review[key]))))*10}
 
-export async function generateBrief({knowledge,context,sourceList,format,revisionNotes,currentBrief,userNotes}:{knowledge:string;context:unknown;sourceList:string;format:"carousel"|"reels"|"single_post";revisionNotes?:string[];currentBrief?:BriefOutput;userNotes?:string}){
-  const formatInstruction=format==="reels"?"Buat 7-10 scene untuk Reels 45-90 detik. section_type=scene. Hook harus bekerja dalam 1-3 detik.":format==="single_post"?"Buat 1-3 section untuk single post. section_type=slide untuk kompatibilitas.":"Buat 8-10 slide carousel sesuai kebutuhan cerita. section_type=slide. Struktur lebih penting daripada angka slide.";
-  const revisionBlock=revisionNotes?.length?`\nMANDATORY EDITOR REVISIONS:\n- ${revisionNotes.join("\n- ")}`:"";
-  const currentBlock=currentBrief?`\nCURRENT BRIEF TO IMPROVE:\n${compactJson(currentBrief)}`:"";
-  const userBlock=userNotes?.trim()?`\nCATATAN MANUSIA YANG WAJIB DIPERTIMBANGKAN:\n${userNotes.trim()}`:"";
+export type QualityReview = {
+  case_strength: number;
+  hook_strength: number;
+  tension: number;
+  insight_depth: number;
+  mechanism_clarity: number;
+  audience_relevance: number;
+  brand_fit: number;
+  brand_pov: number;
+  story_flow: number;
+  non_generic_score: number;
+  conversion_naturalness: number;
+  evidence_safety: number;
+  reviewer_notes: string;
+  required_revisions: string[];
+};
+
+export const qualityKeys: Array<keyof Omit<QualityReview, "reviewer_notes" | "required_revisions">> = [
+  "case_strength", "hook_strength", "tension", "insight_depth", "mechanism_clarity", "audience_relevance",
+  "brand_fit", "brand_pov", "story_flow", "non_generic_score", "conversion_naturalness", "evidence_safety",
+];
+
+export function reviewTotal(review: QualityReview) {
+  return average(qualityKeys.map((key) => clampScore(Number(review[key])))) * 10;
+}
+
+function extractBrandIntelligence(context: unknown) {
+  const raw = (context as { guideline?: { visual_guideline?: unknown } } | null)?.guideline?.visual_guideline;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const intelligence = (raw as Record<string, unknown>).brand_intelligence;
+  if (!intelligence || typeof intelligence !== "object" || Array.isArray(intelligence)) return null;
+  return intelligence as Record<string, unknown>;
+}
+
+export async function generateBrief({ knowledge, context, sourceList, format, revisionNotes, currentBrief, userNotes }: {
+  knowledge: string;
+  context: unknown;
+  sourceList: string;
+  format: "carousel" | "reels" | "single_post";
+  revisionNotes?: string[];
+  currentBrief?: BriefOutput;
+  userNotes?: string;
+}) {
+  const formatInstruction = format === "reels"
+    ? "Buat 7-10 scene untuk Reels 45-90 detik. section_type=scene."
+    : format === "single_post"
+      ? "Buat 1-3 section untuk single post. section_type=slide untuk kompatibilitas."
+      : "Buat 8-9 slide carousel. section_type=slide.";
+  const revisionBlock = revisionNotes?.length ? `\nMANDATORY EDITOR REVISIONS:\n- ${revisionNotes.join("\n- ")}` : "";
+  const currentBlock = currentBrief ? `\nCURRENT BRIEF TO IMPROVE:\n${compactJson(currentBrief)}` : "";
+  const userBlock = userNotes?.trim()
+    ? `\n\n=== MANDATORY HUMAN EDITOR DIRECTIVE ===\nUSER REQUEST:\n${userNotes.trim()}\n\nTHIS IS A REAL EDITING REQUEST, NOT A SUGGESTION.\n1. Treat the user request as the highest-priority editorial instruction after factual accuracy and evidence safety.\n2. Rewrite the actual brief; do not merely describe what should change.\n3. If the request concerns tone, language, voice, wording, readability, pacing, or style, rewrite EVERY human-facing headline and supporting_copy across ALL slides/scenes, plus editorial_thesis, story_arc, cta, purpose, and other relevant human-facing fields.\n4. Do NOT copy the old wording and make token-level edits. Re-author the affected copy from scratch while preserving verified facts, case identity, strategic insight, and evidence references.\n5. If the user asks for \"lebih santai\", use natural conversational Indonesian: shorter sentences, familiar words, active voice, varied rhythm, and a spoken feel while remaining professional. Avoid corporate jargon unless it is necessary and explain it naturally.\n6. If the user asks for \"lebih tajam\", strengthen the tension, contrast, specificity, and point of view rather than merely changing adjectives.\n7. If the user asks for \"lebih engaging\", improve the hook, curiosity gap, transitions, and concrete examples rather than adding hype.\n8. If the user asks for a structural change, rebuild the affected slide/scene sequence instead of only changing labels.\n9. Keep the case evidence, numbers, names, and factual claims intact unless the user explicitly asks to change them and the sources support the change.\n10. Never respond with an explanation of the requested change. The JSON output itself must contain the revised brief.\n11. Before returning JSON, silently compare the revised brief against the old brief and make sure the requested change is visible across the relevant sections. If the old wording still dominates, rewrite again before answering.\n=== END MANDATORY HUMAN EDITOR DIRECTIVE ===`
+    : "";
+
+  const brandIntelligence = extractBrandIntelligence(context);
+  const brandIntelligenceBlock = brandIntelligence
+    ? `\n\n=== BRAND INTELLIGENCE — SOURCE OF TRUTH ===\nThis Brand Intelligence was uploaded/extracted for the selected brand and saved to the brand profile. It is mandatory context, not optional background.\n${compactJson(brandIntelligence)}\n\nBRAND INTELLIGENCE RULES:\n1. Treat this block as the authoritative source for brand positioning, audience, market context, differentiation, capabilities, proof points, communication style, and claims guardrails.\n2. The generated brief MUST be recognizably specific to this brand. A generic competitor could not publish the same brief unchanged.\n3. Target audience must come from Brand Intelligence unless the current campaign explicitly overrides it; when overridden, explain the campaign-specific audience in the brief while preserving the brand's strategic context.\n4. Brand POV, capability bridge, CTA, and recommendations must connect to capabilities/differentiation/proof points actually present in Brand Intelligence.\n5. Do not invent products, services, expertise, customer segments, proof points, achievements, numbers, clients, or claims that are not supported by Brand Intelligence or verification sources.\n6. Use market trends from Brand Intelligence as strategic context, but use live verification sources for current news/case facts.\n7. Respect communication_dos, communication_donts, allowed_claims, and prohibited_claims throughout EVERY slide/scene, not only the CTA.\n8. Do not copy the Brand Intelligence wording mechanically. Translate it into a natural editorial POV and audience-relevant story.\n=== END BRAND INTELLIGENCE — SOURCE OF TRUTH ===\n`
+    : `\n\n=== BRAND INTELLIGENCE STATUS ===\nNo saved Brand Intelligence block was found for this brand. Do not invent brand-specific capabilities or claims. Keep the brief evidence-led and conservative.\n=== END BRAND INTELLIGENCE STATUS ===\n`;
+
   return createStructuredJson<BriefOutput>({
-    schema:briefSchema as unknown as Record<string,unknown>,
-    system:"Kamu adalah elite B2B case-study storyteller, senior content strategist, case analyst, dan editorial director. Ikuti teknik storytelling SMM Simplified: insight-led, evidence-led, mechanism-first, executive-grade. Semua output human-facing wajib Bahasa Indonesia dan tidak boleh terasa seperti template AI.",
-    user:`EDITORIAL KNOWLEDGE BASE:\n${knowledge}\n\nCONTEXT:\n${compactJson(context)}\n\nVERIFICATION SOURCES:\n${sourceList}\n\nTASK:\n${currentBrief?"Perbaiki brief yang ada secara targeted tanpa merusak bagian yang sudah kuat.":"Buat full storytelling brief."}\n${formatInstruction}\n\nSTORY DEVELOPMENT — WAJIB:\n1. Definisikan editorial thesis: setelah melihat konten ini, audience harus percaya apa?\n2. Tentukan pattern terbaik:\n   A) CONTRARIAN CORPORATE CASE bila ada enemy belief / salah diagnosis.\n   B) STRATEGIC CASE-TO-CAPABILITY bila kekuatan cerita berada pada problem → decision → mechanism → outcome.\n3. Bangun cerita dari Case/Evidence → Tension → Mechanism → Insight → Brand POV → Audience Relevance.\n4. Mechanism adalah jantung konten. Jangan puas pada 'perusahaan X melakukan Y'; jelaskan decision/system/process/operating model/capability yang membuat outcome mungkin terjadi.\n5. Brand POV dan CTA hanya boleh muncul setelah value dan insight terbentuk.\n\nHOOK STANDARD:\nHook harus memiliki minimal dua unsur: specificity, contradiction, stakes, recognizable case/company, surprising decision, unresolved tension. Jangan gunakan pembukaan generik seperti 'di era...', 'tahukah Anda', 'transformasi bukan lagi pilihan', atau listicle dangkal. Curiosity gap harus legitimate dan wajib dibayar dengan reveal.\n\nPATTERN A — CONTRARIAN CORPORATE CASE:\nPopular Belief → Challenge → Evidence → Real Case → Unexpected Contrast → Hidden Root Cause → Strategic Insight → Brand POV → Capability Bridge.\nAudience harus merasa: 'Saya awalnya mengira X, ternyata masalahnya ada di Y.'\n\nPATTERN B — STRATEGIC CASE-TO-CAPABILITY:\nUnexpected Business Problem → High-Stakes Situation → Limited/Bad Options → Strategic Move → Mechanism Reveal → Outcome → Underlying Capability → Executive Lesson → Relevant Offer.\nGunakan Binary Trap → Third Way hanya jika benar-benar didukung fakta.\n\nSECTION RULES:\n- Satu slide/scene = satu pekerjaan editorial.\n- Headline harus kuat meski supporting copy disembunyikan.\n- Setiap transisi harus menciptakan alasan untuk lanjut, bukan sekadar 'selanjutnya'.\n- Hindari mengulang pesan dengan wording berbeda.\n- Visual direction harus konkret dan bisa dieksekusi designer.\n- Bila kasus analog digunakan, jelaskan bahwa ia analog dan terangkan mechanism yang portable ke topik; jangan menyamarkannya sebagai exact proof.\n\nEVIDENCE SAFETY:\nSemua fakta harus berasal dari evidence. Gunakan [S1]/[S2] bila relevan. Jangan mengarang angka, quote, motive, legal finding, atau causal claim. Pisahkan FACT, INTERPRETATION, dan BRAND POV.\n\nQUALITY TARGET:\nKonten harus membuat audience minimal berpikir salah satu: 'Ternyata masalahnya bukan itu', 'Saya belum melihat kasus ini dari sisi tersebut', 'Jadi akar masalahnya ada di sistem/decision mechanism', atau 'Ini relevan dengan keputusan di perusahaan saya'. Hindari AI slop, filler, jargon, moral-of-the-story yang normatif, dan promotion terlalu dini.${revisionBlock}${currentBlock}${userBlock}`,
-    temperature:currentBrief?0.28:0.34,
+    schema: briefSchema as unknown as Record<string, unknown>,
+    system: "Kamu adalah elite B2B case-study storyteller, senior copywriter, dan editorial director. Semua output human-facing wajib Bahasa Indonesia. Kamu menulis brief eksekutif yang evidence-led, case-first, natural, dan tidak terasa seperti template AI. Brand Intelligence yang tersimpan untuk brand terpilih adalah source of truth untuk brand fit dan harus terlihat nyata dalam output. Instruksi eksplisit dari user adalah prioritas utama selama tidak bertentangan dengan factual accuracy, evidence safety, atau struktur output.",
+    user: `\nEDITORIAL KNOWLEDGE BASE:\n${knowledge}\n\nCONTEXT:\n${compactJson(context)}\n${brandIntelligenceBlock}\n\nVERIFICATION SOURCES:\n${sourceList}\n\nTASK:\n${currentBrief ? "REWRITE THE EXISTING BRIEF according to the human editor directive. This is a substantive rewrite, not a proofreading pass." : "Buat full storytelling brief."}\n${formatInstruction}\n\nCASE-FIRST RULE — WAJIB ketika verified case kuat tersedia:\n1. Slide/scene 1 membuka dari KASUS NYATA, bukan teori, definisi, mitos umum, atau promosi.\n2. Gunakan nama perusahaan/organisasi + stakes/outcome/kontradiksi paling menarik yang benar-benar didukung source.\n3. Hook harus memicu “kok bisa?” tanpa melebih-lebihkan evidence.\n4. Slide/scene 2 tetap memperdalam konteks kasus.\n5. Urutan default: Case Hook → Context → Tension → Failure/Turning Point → Mechanism → Outcome → Executive Insight → Brand POV → Capability Bridge/CTA.\n6. Mechanism adalah jantung konten: jelaskan HOW/WHY secara konkret.\n7. ISO/framework/produk/brand baru masuk setelah audience memahami konflik dan insight.\n\nBRAND-FIT QUALITY GATE — WAJIB:\n- Sebelum menulis setiap slide/scene, gunakan Brand Intelligence sebagai filter: \"Apakah ini relevan dengan audience, positioning, capability, differentiation, dan POV brand?\"\n- Jangan memaksa produk masuk jika tidak relevan dengan kasus.\n- Jangan membuat insight yang bisa diberikan brand mana pun tanpa kaitan nyata ke brand intelligence.\n- Jika capability bridge tidak didukung oleh Brand Intelligence, jangan mengarang bridge; gunakan Brand POV yang lebih aman.\n- Jika campaign topic bertentangan dengan Brand Intelligence, prioritaskan factual accuracy lalu beri angle yang masih credible terhadap brand daripada memaksakan positioning.\n\nQUALITY RULES:\n- Semua fakta hanya boleh berada di dalam evidence yang tersedia.\n- Gunakan label [S1], [S2] pada case_evidence/evidence_needed/fact_check_notes jika relevan.\n- Jangan mengarang quote, angka, motif, legal finding, atau causal claim.\n- Bedakan fakta, interpretasi, dan Brand POV.\n- Jangan sekadar merangkum berita; temukan mekanisme bisnis dan executive implication.\n- Supporting copy harus cukup detail untuk content writer/designer mengeksekusi.\n- Visual direction harus konkret, bukan “gunakan visual menarik”.\n- Brand POV harus spesifik terhadap konteks brand/campaign dan Brand Intelligence, bukan kalimat yang bisa dipakai semua brand.\n- CTA harus natural dan sesuai funnel stage serta capability yang benar-benar tersedia.\n- Hindari kata-kata AI generik seperti “di era yang semakin dinamis”, “penting untuk dipahami”, dan listicle dangkal.\n${revisionBlock}${currentBlock}${userBlock}\n`,
+    temperature: currentBrief ? 0.42 : 0.35,
   });
 }
 
-export async function reviewBrief({knowledge,context,brief}:{knowledge:string;context:unknown;brief:BriefOutput}){
+export async function reviewBrief({ knowledge, context, brief, userNotes }: { knowledge: string; context: unknown; brief: BriefOutput; userNotes?: string }) {
+  const userDirective = userNotes?.trim()
+    ? `\n\nHUMAN EDITOR REQUEST TO VERIFY:\n${userNotes.trim()}\n\nYou must judge whether this request is visibly reflected throughout the affected brief sections. A style/tone/language request is NOT satisfied by changing one slide only. If it asks for a global writing change, check the whole set of slides/scenes and master fields.\n`
+    : "";
+  const brandIntelligence = extractBrandIntelligence(context);
+  const brandIntelligenceReviewBlock = brandIntelligence
+    ? `\n\nBRAND INTELLIGENCE SOURCE OF TRUTH:\n${compactJson(brandIntelligence)}\n\nFor Brand Fit and Brand POV scoring, compare the brief against this source of truth. Penalize unsupported capability claims, wrong audience, generic positioning, missing differentiation, ignored communication guardrails, or CTA that does not connect to the documented brand.\n`
+    : "";
+
   return createStructuredJson<QualityReview>({
-    schema:qualitySchema as unknown as Record<string,unknown>,
-    system:"Kamu adalah executive editorial director dan critic yang sangat ketat. Gunakan standar storytelling SMM Simplified. Tolak konten generik, unsupported, terlalu promosi, atau copy yang hanya terdengar pintar.",
-    user:`EDITORIAL STANDARD:\n${knowledge}\n\nCONTEXT + SOURCES:\n${compactJson(context)}\n\nBRIEF:\n${compactJson(brief)}\n\nSkor 0-10 secara ketat untuk seluruh dimensi schema. Skor 9+ berarti publish-worthy setelah human fact check.\n\nPENALTI BESAR bila:\n- hook generik/tidak spesifik;\n- tidak ada legitimate tension;\n- brief hanya menceritakan 'apa yang terjadi' tanpa mechanism;\n- insight berupa nasihat normatif yang bisa berlaku untuk topik apa pun;\n- pattern cerita tidak jelas atau payoff tidak memenuhi promise;\n- brand/CTA masuk terlalu cepat;\n- analogous case diposisikan seolah exact proof;\n- slide/scene repetitif;\n- visual direction abstrak;\n- filler, jargon, atau AI slop dominan;\n- interpretasi dipresentasikan sebagai fakta.\n\nrequired_revisions harus konkret per bagian/slide dan memprioritaskan: hook → tension → mechanism → insight → audience relevance → natural conversion.`,
-    temperature:0.12,
+    schema: qualitySchema as unknown as Record<string, unknown>,
+    system: "Kamu adalah executive editorial director yang keras. Jangan memberi skor tinggi hanya karena brief terlihat rapi. Tolak konten generik dan unsupported. Untuk revisi yang diminta manusia, periksa kepatuhan terhadap request secara menyeluruh. Brand Intelligence adalah sumber kebenaran untuk menilai brand fit.",
+    user: `\nEDITORIAL STANDARD:\n${knowledge}\n\nCONTEXT + SOURCES:\n${compactJson(context)}\n${brandIntelligenceReviewBlock}\n\nBRIEF:\n${compactJson(brief)}\n${userDirective}\n\nBeri skor 0-10 secara ketat untuk:\n- Case Strength\n- Hook Strength\n- Tension\n- Insight Depth\n- Mechanism Clarity\n- Audience Relevance\n- Brand Fit\n- Brand POV\n- Story Flow\n- Non-Generic Score\n- Conversion Naturalness\n- Evidence Safety\n\nSkor 9+ berarti publish-worthy setelah human fact check, bukan sekadar “bagus”.\nPenalti besar jika:\n- verified case kuat tersedia tapi opening masih generik;\n- hook melebih-lebihkan evidence;\n- mekanisme HOW/WHY lemah;\n- brand selling muncul terlalu cepat;\n- insight dapat ditulis tanpa riset;\n- slide repetitif;\n- visual direction terlalu abstrak;\n- brief dapat dipakai brand lain tanpa perubahan berarti;\n- audience, positioning, capability, differentiation, atau POV tidak sesuai Brand Intelligence;\n- CTA/capability bridge mengandung klaim yang tidak didukung Brand Intelligence;\n- permintaan user hanya diterapkan pada satu bagian padahal permintaannya global.\n\nrequired_revisions harus berupa instruksi konkret per bagian/slide. Jika human request belum benar-benar terpenuhi, tuliskan revisi yang spesifik untuk memperbaikinya. Jika Brand Fit < 8, wajib beri revisi yang menunjuk bagian konkret yang harus dibuat lebih brand-specific.\n`,
+    temperature: 0.1,
   });
 }
