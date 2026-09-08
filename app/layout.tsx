@@ -5,6 +5,8 @@ import AuthGuard from "@/components/auth-guard";
 import BrandAlignmentWidget from "@/components/brand-alignment-widget";
 import TaskAssignmentWidget from "@/components/task-assignment-widget";
 import WorkspaceHydrator from "@/components/workspace-hydrator";
+import BufferInstagramPublisher from "@/components/buffer-instagram-publisher";
+import CalendarLegacyDesignLinkHider from "@/components/calendar-legacy-design-link-hider";
 import "./globals.css";import "./social-dashboard.css";import "./brand-intelligence.css";import "./calendar-channels.css";
 export const metadata:Metadata={title:"Proxsis Strategy Digital Marketing Dashboard",description:"Your all-in-one digital marketing performance dashboard"};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body><ActiveBrandProvider><BrandIntelligenceProvider><AuthGuard><WorkspaceHydrator/>{children}<BrandAlignmentWidget/><TaskAssignmentWidget/></AuthGuard></BrandIntelligenceProvider></ActiveBrandProvider></body></html>}
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body><ActiveBrandProvider><BrandIntelligenceProvider><AuthGuard><WorkspaceHydrator/>{children}<BrandAlignmentWidget/><TaskAssignmentWidget/><BufferInstagramPublisher/><CalendarLegacyDesignLinkHider/></AuthGuard></BrandIntelligenceProvider></ActiveBrandProvider></body></html>}
