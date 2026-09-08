@@ -1,9 +1,25 @@
-export type TavilyResult = { title?: string; url?: string; content?: string; score?: number };
-export type SourceRecord = { ref: string; title: string; url: string; publisher: string; content: string; score: number };
+export type TavilyResult = {
+  title?: string;
+  url?: string;
+  content?: string;
+  score?: number;
+};
+
+export type SourceRecord = {
+  ref: string;
+  title: string;
+  url: string;
+  publisher: string;
+  content: string;
+  score: number;
+};
 
 function publisherFromUrl(url: string) {
-  try { return new URL(url).hostname.replace(/^www\./, ""); }
-  catch { return "Web source"; }
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Web source";
+  }
 }
 
 export async function tavilySearch(query: string): Promise<TavilyResult[]> {
@@ -25,16 +41,19 @@ export async function tavilySearch(query: string): Promise<TavilyResult[]> {
 
 export function normalizeSources(batches: Array<{ query: string; results: TavilyResult[] }>) {
   const unique = new Map<string, Omit<SourceRecord, "ref">>();
-  for (const batch of batches) for (const result of batch.results) {
-    const url = String(result.url ?? "").trim();
-    if (!/^https?:\/\//i.test(url) || unique.has(url)) continue;
-    unique.set(url, {
-      title: String(result.title ?? publisherFromUrl(url)).trim(),
-      url,
-      publisher: publisherFromUrl(url),
-      content: String(result.content ?? "").replace(/\s+/g, " ").trim().slice(0, 2600),
-      score: Number.isFinite(Number(result.score)) ? Number(result.score) : 0,
-    });
+  for (const batch of batches) {
+    for (const result of batch.results) {
+      const url = String(result.url ?? "").trim();
+      if (!/^https?:\/\//i.test(url)) continue;
+      if (unique.has(url)) continue;
+      unique.set(url, {
+        title: String(result.title ?? publisherFromUrl(url)).trim(),
+        url,
+        publisher: publisherFromUrl(url),
+        content: String(result.content ?? "").replace(/\s+/g, " ").trim().slice(0, 2600),
+        score: Number.isFinite(Number(result.score)) ? Number(result.score) : 0,
+      });
+    }
   }
-  return Array.from(unique.values()).sort((a,b)=>b.score-a.score).slice(0,24).map((source,index)=>({ref:`S${index+1}`,...source}));
+  return Array.from(unique.values()).sort((a, b) => b.score - a.score).slice(0, 24).map((source, index) => ({ ref: `S${index + 1}`, ...source }));
 }
