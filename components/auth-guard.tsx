@@ -1,12 +1,31 @@
 "use client";
 
-import {useEffect,useState} from "react";
-import {usePathname,useRouter} from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
-const SESSION_KEY="proxsis-auth:session:v1";
-export default function AuthGuard({children}:{children:React.ReactNode}){
- const router=useRouter();const pathname=usePathname();const [ready,setReady]=useState(false);
- useEffect(()=>{if(pathname==="/login"||pathname.startsWith("/auth/accept")){setReady(true);return}const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;if(!url||!key){setReady(true);return}let valid=false;try{const raw=localStorage.getItem(SESSION_KEY);if(raw){const session=JSON.parse(raw);valid=Boolean(session?.access_token&&Number(session?.expires_at||0)>Date.now()/1000)}}catch{}if(!valid){router.replace(`/login?next=${encodeURIComponent(pathname)}`);return}setReady(true)},[pathname,router]);
- if(!ready)return <div style={{minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial,sans-serif",color:"#756b70"}}>Checking workspace access...</div>;
- return <>{children}</>;
+export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) router.replace("/login");
+      else setReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) router.replace("/login");
+      else if (active) setReady(true);
+    });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (!ready) return <div className="min-h-screen grid place-items-center text-sm text-slate-500">Checking session...</div>;
+  return <>{children}</>;
 }
