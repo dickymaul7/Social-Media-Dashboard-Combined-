@@ -24,7 +24,7 @@ function detectSelected(card:HTMLElement):SelectedContent|null{
  return expansion?{briefId:expansion.brief_id,brandId:expansion.brand_id||"",channel,title:expansion.title,scheduledFor:expansion.scheduled_for}:null;
 }
 
-function authHeaders(){const token=String(readSession()?.access_token||"");return token?{Authorization:`Bearer ${token}`}:{}}
+function authHeaders():Record<string,string>{const token=String(readSession()?.access_token||"");return token?{Authorization:`Bearer ${token}`}:{} }
 
 export default function CalendarTaskAssignment(){
  const[target,setTarget]=useState<HTMLElement|null>(null);const[selected,setSelected]=useState<SelectedContent|null>(null);const[members,setMembers]=useState<TeamMember[]>([]);const[assignee,setAssignee]=useState("");const[dueDate,setDueDate]=useState("");const[priority,setPriority]=useState<WorkspaceTask["priority"]>("medium");const[message,setMessage]=useState("");const[error,setError]=useState("");const[loadingMembers,setLoadingMembers]=useState(false);
