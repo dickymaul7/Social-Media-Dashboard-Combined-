@@ -1,0 +1,15 @@
+# Default owner for review-sensitive changes.
+# Replace or add additional GitHub usernames as the team grows.
+* @dickymaul7
+
+# Production-critical areas
+/app/api/ @dickymaul7
+/app/users-access/ @dickymaul7
+/app/tasks/ @dickymaul7
+/components/calendar* @dickymaul7
+/lib/access-control.ts @dickymaul7
+/lib/workspace-store.ts @dickymaul7
+/lib/ai/ @dickymaul7
+/public/knowledge/ @dickymaul7
+/supabase/ @dickymaul7
+/database/ @dickymaul7
