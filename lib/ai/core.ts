@@ -2,7 +2,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export function getAIModel(){return process.env.DEEPSEEK_MODEL?.trim()||"deepseek-v4-flash"}
-export async function loadStorytellingKnowledge(){const base=await fs.readFile(path.join(process.cwd(),"public","knowledge","storytelling_knowledge_base.md"),"utf8");let addendum="";try{addendum=await fs.readFile(path.join(process.cwd(),"public","knowledge","smm_simplified_skill_addendum.md"),"utf8")}catch{}return addendum?`${base}\n\n---\n\n${addendum}`:base}
+
+async function readOptionalKnowledge(...segments:string[]){
+ try{return await fs.readFile(path.join(process.cwd(),...segments),"utf8")}catch{return""}
+}
+
+export async function loadStorytellingKnowledge(){
+ const base=await fs.readFile(path.join(process.cwd(),"public","knowledge","storytelling_knowledge_base.md"),"utf8");
+ const modules=await Promise.all([
+  readOptionalKnowledge("public","knowledge","smm_simplified_skill_addendum.md"),
+  readOptionalKnowledge("public","knowledge","copywriting-skills","corporate_case_contrast.md"),
+ ]);
+ return [base,...modules.filter(Boolean)].join("\n\n---\n\n");
+}
+
 export function compactJson(value:unknown){return JSON.stringify(value,null,2)}
 function stripCodeFences(text:string){return text.trim().replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```$/i,"").trim()}
 function extractFirstJson(text:string){const cleaned=stripCodeFences(text);try{JSON.parse(cleaned);return cleaned}catch{}const starts=[cleaned.indexOf("{"),cleaned.indexOf("[")].filter(n=>n>=0).sort((a,b)=>a-b);if(!starts.length)return cleaned;const start=starts[0],opening=cleaned[start],closing=opening==="{"?"}":"]";let depth=0,inString=false,escaped=false;for(let i=start;i<cleaned.length;i++){const ch=cleaned[i];if(inString){if(escaped)escaped=false;else if(ch==="\\")escaped=true;else if(ch==='"')inString=false;continue}if(ch==='"'){inString=true;continue}if(ch===opening)depth++;if(ch===closing){depth--;if(depth===0)return cleaned.slice(start,i+1)}}return cleaned}
