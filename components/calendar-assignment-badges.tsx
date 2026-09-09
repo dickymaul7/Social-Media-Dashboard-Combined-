@@ -41,6 +41,6 @@ export default function CalendarAssignmentBadges(){
     const workspace=document.querySelector(".advanced-calendar");if(workspace){observer?.disconnect();observer=new MutationObserver(()=>{window.clearTimeout(timer);timer=window.setTimeout(decorate,80)});observer.observe(workspace,{childList:true,subtree:true})}
    }catch{}
   }
-  void decorateAll();const refresh=()=>void decorateAll();window.addEventListener("proxsis-workspace:updated",refresh as EventListener);window.addEventListener("proxsis:calendar-changed",refresh);window.addEventListener("focus",refresh);return()=>{disposed=true;window.clearTimeout(timer);observer?.disconnect();window.removeEventListener("proxsis-workspace:updated",refresh as EventListener);window.removeEventListener("proxsis:calendar-changed",refresh);window.removeEventListener("focus",refresh)}
+  void decorateAll();const refresh=()=>void decorateAll();window.addEventListener("proxsis:calendar-changed",refresh);window.addEventListener("focus",refresh);return()=>{disposed=true;window.clearTimeout(timer);observer?.disconnect();window.removeEventListener("proxsis:calendar-changed",refresh);window.removeEventListener("focus",refresh)}
  },[]);return null;
 }
