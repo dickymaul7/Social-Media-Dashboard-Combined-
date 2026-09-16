@@ -1,57 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { MetaCsvUpload } from "./meta-csv-upload";
+import { useMetaAnalytics } from "./use-meta-analytics";
 
 const fmt = new Intl.NumberFormat("id-ID");
 
-type MetaPayload = {
-  source: string;
-  synced_at: string;
-  account: {
-    username?: string;
-    name?: string;
-    followers_count?: number;
-    media_count?: number;
-    profile_picture_url?: string;
-  };
-  summary: {
-    reach: number;
-    views: number;
-    interactions: number;
-    likes: number;
-    comments: number;
-    saved: number;
-    shares: number;
-  };
-  media: Array<{
-    timestamp?: string | null;
-    reach: number;
-    views: number;
-    interactions: number;
-  }>;
-};
-
 export function AudienceAnalytics() {
-  const [data, setData] = useState<MetaPayload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/meta/instagram/analytics", { cache: "no-store" });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload?.error || "Gagal memuat Meta analytics.");
-        if (!cancelled) setData(payload);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Gagal memuat Meta analytics.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
 
   const avgReach = useMemo(() => {
     if (!data?.media?.length) return 0;
@@ -72,6 +28,8 @@ export function AudienceAnalytics() {
       </div>
       {data && <span className="feature-badge">Live Meta</span>}
     </div>
+
+    <MetaCsvUpload onImported={() => void refresh()} hasImport={hasImportedCsv} />
 
     {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
     {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}

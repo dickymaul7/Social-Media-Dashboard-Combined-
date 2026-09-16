@@ -1,66 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { MetaCsvUpload } from "./meta-csv-upload";
+import { useMetaAnalytics } from "./use-meta-analytics";
+import type { AnalyticsMedia as MetaMedia } from "@/lib/social-dashboard/csv-import";
 
 const fmt = new Intl.NumberFormat("id-ID");
 
-type MetaMedia = {
-  id: string;
-  caption: string;
-  media_type: string;
-  media_product_type?: string | null;
-  media_url?: string | null;
-  thumbnail_url?: string | null;
-  permalink?: string | null;
-  timestamp?: string | null;
-  likes: number;
-  comments: number;
-  reach: number;
-  saved: number;
-  shares: number;
-  views: number;
-  interactions: number;
-  engagement_rate: number;
-};
-
-type MetaPayload = {
-  source: string;
-  synced_at: string;
-  account: { username?: string; followers_count?: number; media_count?: number };
-  summary: { reach: number; views: number; interactions: number; likes: number; comments: number; saved: number; shares: number };
-  media: MetaMedia[];
-};
-
 function formatType(item: MetaMedia) {
-  if (item.media_product_type === "REELS") return "Reel";
-  if (item.media_type === "CAROUSEL_ALBUM") return "Carousel";
+  if (item.media_product_type === "REELS" || item.media_type === "REELS" || item.media_type === "REEL") return "Reel";
+  if (item.media_type === "CAROUSEL_ALBUM" || item.media_type === "CAROUSEL") return "Carousel";
   if (item.media_type === "VIDEO") return "Video";
   return "Image";
 }
 
 export function ContentPerformance() {
-  const [data, setData] = useState<MetaPayload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
   const [postFilter, setPostFilter] = useState("All");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await fetch("/api/meta/instagram/analytics", { cache: "no-store" });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload?.error || "Gagal memuat Meta analytics.");
-        if (!cancelled) setData(payload);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Gagal memuat Meta analytics.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   const filteredPosts = useMemo(() => {
     if (!data) return [];
@@ -83,6 +39,8 @@ export function ContentPerformance() {
         <option>All</option><option>Reel</option><option>Carousel</option><option>Video</option><option>Image</option>
       </select>
     </div>
+
+    <MetaCsvUpload onImported={() => void refresh()} hasImport={hasImportedCsv} />
 
     {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
     {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}
