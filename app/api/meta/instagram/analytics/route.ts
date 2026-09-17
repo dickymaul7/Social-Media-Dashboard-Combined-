@@ -1,7 +1,31 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const graphVersion = process.env.META_GRAPH_VERSION || "v25.0";
 const graphBase = `https://graph.facebook.com/${graphVersion}`;
+
+function getBearer(request: Request) {
+  const value = request.headers.get("authorization") || "";
+  return value.toLowerCase().startsWith("bearer ") ? value.slice(7).trim() : "";
+}
+
+async function validateWorkspaceSession(request: Request) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return true;
+  const token = getBearer(request);
+  if (!token) return false;
+  try {
+    const response = await fetch(`${url}/auth/v1/user`, {
+      headers: { apikey: anon, Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 async function metaGet(path: string, token: string) {
   const joiner = path.includes("?") ? "&" : "?";
@@ -13,18 +37,26 @@ async function metaGet(path: string, token: string) {
   return payload;
 }
 
-async function metricValue(mediaId: string, metric: string, token: string) {
-  try {
-    const payload = await metaGet(`/${mediaId}/insights?metric=${encodeURIComponent(metric)}`, token);
-    const row = Array.isArray(payload?.data) ? payload.data[0] : null;
+const mediaMetrics = ["reach", "saved", "shares", "views", "total_interactions"] as const;
+
+async function metricValues(mediaId: string, token: string) {
+  const payload = await metaGet(
+    `/${mediaId}/insights?metric=${encodeURIComponent(mediaMetrics.join(","))}`,
+    token
+  );
+  const values: Record<string, number> = {};
+  for (const row of Array.isArray(payload?.data) ? payload.data : []) {
     const raw = row?.values?.[0]?.value ?? row?.value ?? 0;
-    return typeof raw === "number" ? raw : Number(raw || 0);
-  } catch {
-    return 0;
+    const value = typeof raw === "number" ? raw : Number(raw || 0);
+    values[String(row?.name || "")] = Number.isFinite(value) ? value : 0;
   }
+  return values;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!(await validateWorkspaceSession(request))) {
+    return NextResponse.json({ error: "Session login tidak valid." }, { status: 401 });
+  }
   try {
     const token = process.env.META_ACCESS_TOKEN || "";
     const igUserId = process.env.META_IG_USER_ID || "";
@@ -48,15 +80,20 @@ export async function GET() {
       token
     );
 
+    let failedInsightItems = 0;
     const media = await Promise.all(
       (Array.isArray(mediaPayload?.data) ? mediaPayload.data : []).map(async (item: any) => {
-        const [reach, saved, shares, views, totalInteractions] = await Promise.all([
-          metricValue(item.id, "reach", token),
-          metricValue(item.id, "saved", token),
-          metricValue(item.id, "shares", token),
-          metricValue(item.id, "views", token),
-          metricValue(item.id, "total_interactions", token),
-        ]);
+        let insights: Record<string, number> = {};
+        try {
+          insights = await metricValues(item.id, token);
+        } catch {
+          failedInsightItems += 1;
+        }
+        const reach = insights.reach || 0;
+        const saved = insights.saved || 0;
+        const shares = insights.shares || 0;
+        const views = insights.views || 0;
+        const totalInteractions = insights.total_interactions || 0;
         const likes = Number(item.like_count || 0);
         const comments = Number(item.comments_count || 0);
         const interactions = totalInteractions || likes + comments + saved + shares;
@@ -99,6 +136,9 @@ export async function GET() {
       source: "Meta Graph API",
       graph_version: graphVersion,
       synced_at: new Date().toISOString(),
+      warnings: failedInsightItems
+        ? [`Insights tidak tersedia untuk ${failedInsightItems} dari ${media.length} konten. Angka pada konten tersebut ditandai sebagai 0.`]
+        : [],
       account,
       summary,
       media,
