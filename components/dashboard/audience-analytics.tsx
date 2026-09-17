@@ -26,7 +26,7 @@ export function AudienceAnalytics() {
         <h2>Audience analytics</h2>
         <p>Overview akun dan performa audiens dengan susunan ringkas yang mengikuti pola Meta Business Suite.</p>
       </div>
-      {data && <span className="feature-badge">Live Meta</span>}
+      {data && <span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span>}
     </div>
 
     <MetaCsvUpload onImported={() => void refresh()} hasImport={hasImportedCsv} />
@@ -34,6 +34,7 @@ export function AudienceAnalytics() {
     {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
     {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}
     {data && <div className="source-note">Sumber: {data.source} · @{data.account?.username || "instagram"} · Sinkron terakhir {new Date(data.synced_at).toLocaleString("id-ID")}</div>}
+    {data?.warnings?.map((warning) => <div className="source-note warning" key={warning}>{warning}</div>)}
 
     {data && <>
       <div className="audience-summary">
