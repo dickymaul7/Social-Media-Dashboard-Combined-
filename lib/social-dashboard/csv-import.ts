@@ -18,6 +18,7 @@ export type AnalyticsMedia = {
 export type AnalyticsPayload = {
   source: string;
   synced_at: string;
+  warnings?: string[];
   account: { username?: string; name?: string; followers_count?: number; media_count?: number };
   summary: { reach: number; views: number; interactions: number; likes: number; comments: number; saved: number; shares: number };
   media: AnalyticsMedia[];
