@@ -33,7 +33,7 @@ export function ContentPerformance() {
       <div>
         <p className="eyebrow">META INSIGHTS</p>
         <h2>Content performance</h2>
-        <p>Ringkasan performa konten Instagram langsung dari Meta Graph API dengan susunan metrik seperti Meta Business Suite.</p>
+        <p>Ringkasan performa konten Instagram dari Meta Graph API atau file ekspor Meta Business Suite.</p>
       </div>
       <select className="feature-select" value={postFilter} onChange={(e) => setPostFilter(e.target.value)}>
         <option>All</option><option>Reel</option><option>Carousel</option><option>Video</option><option>Image</option>
@@ -45,6 +45,7 @@ export function ContentPerformance() {
     {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
     {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}
     {data && <div className="source-note">Sumber: {data.source} · @{data.account?.username || "instagram"} · Sinkron terakhir {new Date(data.synced_at).toLocaleString("id-ID")}</div>}
+    {data?.warnings?.map((warning) => <div className="source-note warning" key={warning}>{warning}</div>)}
 
     {data && <>
       <div className="audience-summary">
@@ -65,7 +66,7 @@ export function ContentPerformance() {
         </article>
 
         <article className="social-subcard top-post-card">
-          <div className="panel-head"><div><h2>Top content</h2><p>Konten dengan interaksi tertinggi</p></div><span className="feature-badge">Live Meta</span></div>
+          <div className="panel-head"><div><h2>Top content</h2><p>Konten dengan interaksi tertinggi</p></div><span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span></div>
           {highlightedPost ? <>
             <strong>{highlightedPost.caption?.trim().slice(0,140) || "Instagram content"}</strong>
             <div className="top-post-metrics">
