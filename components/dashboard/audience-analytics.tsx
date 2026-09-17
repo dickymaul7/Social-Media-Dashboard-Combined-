@@ -1,17 +1,71 @@
-import { defaultInstagramMetrics, socialAudience } from "@/lib/social-dashboard/data";
+"use client";
 
-const fmt = new Intl.NumberFormat("en-US");
+import { useMemo } from "react";
+import { MetaCsvUpload } from "./meta-csv-upload";
+import { useMetaAnalytics } from "./use-meta-analytics";
+
+const fmt = new Intl.NumberFormat("id-ID");
 
 export function AudienceAnalytics() {
-  const metrics = defaultInstagramMetrics;
+  const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
+
+  const avgReach = useMemo(() => {
+    if (!data?.media?.length) return 0;
+    return Math.round(data.summary.reach / data.media.length);
+  }, [data]);
+
+  const avgInteractions = useMemo(() => {
+    if (!data?.media?.length) return 0;
+    return Math.round(data.summary.interactions / data.media.length);
+  }, [data]);
+
   return <section className="panel dashboard-module">
-    <div className="feature-head"><div><p className="eyebrow">SOCIAL MEDIA INTELLIGENCE</p><h2>Audience analytics</h2><p>Pahami profil audiens, lokasi utama, dan peluang distribusi konten.</p></div><span className="feature-badge">Snapshot {socialAudience.capturedAt}</span></div>
-    <div className="source-note">Data source: audience snapshot ({socialAudience.source}). Bukan live Instagram Insights.</div>
-    <div className="audience-summary"><div><span>Total followers</span><strong>{fmt.format(metrics.followers)}</strong></div><div><span>Top age</span><strong>25–34</strong></div><div><span>Top location</span><strong>Jakarta</strong></div><div><span>Active window</span><strong>Senin · 03:00</strong></div></div>
-    <div className="audience-grid">
-      <article className="social-subcard"><div className="panel-head"><div><h2>Age distribution</h2><p>Persentase follower</p></div></div>{socialAudience.age.map((item)=><div className="progress-stat" key={item.label}><div><strong>{item.label}</strong><span>{item.value}%</span></div><div className="progress-track"><i style={{width:`${item.value}%`}}/></div></div>)}</article>
-      <article className="social-subcard"><div className="panel-head"><div><h2>Gender split</h2><p>Distribusi audiens</p></div></div><div className="gender-donut"><div><strong>52%</strong><span>Laki-laki</span></div></div><div className="gender-legend"><span><i className="male"/> Laki-laki</span><span><i className="female"/> Perempuan</span></div></article>
-      <article className="social-subcard"><div className="panel-head"><div><h2>Top locations</h2><p>Kota dengan audiens terbesar</p></div></div>{socialAudience.locations.map((item)=><div className="location-row" key={item.label}><span>{item.label}</span><div className="progress-track"><i style={{width:`${item.value}%`}}/></div><strong>{item.value}%</strong></div>)}</article>
+    <div className="feature-head">
+      <div>
+        <p className="eyebrow">META INSIGHTS</p>
+        <h2>Audience analytics</h2>
+        <p>Overview akun dan performa audiens dengan susunan ringkas yang mengikuti pola Meta Business Suite.</p>
+      </div>
+      {data && <span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span>}
     </div>
+
+    <MetaCsvUpload onImported={() => void refresh()} hasImport={hasImportedCsv} />
+
+    {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
+    {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}
+    {data && <div className="source-note">Sumber: {data.source} · @{data.account?.username || "instagram"} · Sinkron terakhir {new Date(data.synced_at).toLocaleString("id-ID")}</div>}
+    {data?.warnings?.map((warning) => <div className="source-note warning" key={warning}>{warning}</div>)}
+
+    {data && <>
+      <div className="audience-summary">
+        <div><span>Followers</span><strong>{fmt.format(data.account?.followers_count || 0)}</strong></div>
+        <div><span>Total content</span><strong>{fmt.format(data.account?.media_count || 0)}</strong></div>
+        <div><span>Reach konten terbaru</span><strong>{fmt.format(data.summary.reach)}</strong></div>
+        <div><span>Views konten terbaru</span><strong>{fmt.format(data.summary.views)}</strong></div>
+      </div>
+
+      <div className="audience-grid">
+        <article className="social-subcard">
+          <div className="panel-head"><div><h2>Account overview</h2><p>Ringkasan akun Instagram</p></div></div>
+          <div className="location-row"><span>Username</span><strong>@{data.account?.username || "-"}</strong></div>
+          <div className="location-row"><span>Nama akun</span><strong>{data.account?.name || "-"}</strong></div>
+          <div className="location-row"><span>Followers</span><strong>{fmt.format(data.account?.followers_count || 0)}</strong></div>
+          <div className="location-row"><span>Media published</span><strong>{fmt.format(data.account?.media_count || 0)}</strong></div>
+        </article>
+
+        <article className="social-subcard">
+          <div className="panel-head"><div><h2>Content averages</h2><p>Rata-rata dari konten terbaru yang tersedia</p></div></div>
+          <div className="location-row"><span>Average reach</span><strong>{fmt.format(avgReach)}</strong></div>
+          <div className="location-row"><span>Average interactions</span><strong>{fmt.format(avgInteractions)}</strong></div>
+          <div className="location-row"><span>Total likes</span><strong>{fmt.format(data.summary.likes)}</strong></div>
+          <div className="location-row"><span>Total comments</span><strong>{fmt.format(data.summary.comments)}</strong></div>
+        </article>
+
+        <article className="social-subcard">
+          <div className="panel-head"><div><h2>Audience demographics</h2><p>Usia, gender, dan lokasi</p></div></div>
+          <p style={{lineHeight:1.6}}>Meta memerlukan endpoint audience demographic khusus dan eligibility data tertentu untuk age, gender, serta top locations. Bagian ini sengaja tidak memakai data dummy. Setelah akun target mengembalikan demographic insights, data akan kita aktifkan di sini.</p>
+        </article>
+      </div>
+    </>}
   </section>;
 }

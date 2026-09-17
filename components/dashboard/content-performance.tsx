@@ -1,32 +1,94 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { socialPosts } from "@/lib/social-dashboard/data";
+import { MetaCsvUpload } from "./meta-csv-upload";
+import { useMetaAnalytics } from "./use-meta-analytics";
+import type { AnalyticsMedia as MetaMedia } from "@/lib/social-dashboard/csv-import";
 
-const fmt = new Intl.NumberFormat("en-US");
+const fmt = new Intl.NumberFormat("id-ID");
+
+function formatType(item: MetaMedia) {
+  if (item.media_product_type === "REELS" || item.media_type === "REELS" || item.media_type === "REEL") return "Reel";
+  if (item.media_type === "CAROUSEL_ALBUM" || item.media_type === "CAROUSEL") return "Carousel";
+  if (item.media_type === "VIDEO") return "Video";
+  return "Image";
+}
 
 export function ContentPerformance() {
+  const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
   const [postFilter, setPostFilter] = useState("All");
-  const filteredPosts = postFilter === "All" ? socialPosts : socialPosts.filter((post) => post.type === postFilter);
-  const totalEngagement = useMemo(
-    () => socialPosts.reduce((sum, post) => sum + post.likes + post.comments + post.saves + post.shares, 0),
-    []
-  );
-  const highlightedPost = socialPosts[0];
+
+  const filteredPosts = useMemo(() => {
+    if (!data) return [];
+    return postFilter === "All" ? data.media : data.media.filter((post) => formatType(post) === postFilter);
+  }, [data, postFilter]);
+
+  const highlightedPost = useMemo(() => {
+    if (!data?.media?.length) return null;
+    return [...data.media].sort((a, b) => b.interactions - a.interactions)[0];
+  }, [data]);
 
   return <section className="panel dashboard-module">
     <div className="feature-head">
-      <div><p className="eyebrow">SOCIAL MEDIA INTELLIGENCE</p><h2>Content performance</h2><p>Bandingkan format, temukan post terbaik, dan gunakan data untuk mengoptimalkan kalender konten.</p></div>
-      <select className="feature-select" value={postFilter} onChange={(e) => setPostFilter(e.target.value)}><option>All</option><option>Reel</option><option>Carousel</option><option>Image</option><option>Story</option></select>
+      <div>
+        <p className="eyebrow">META INSIGHTS</p>
+        <h2>Content performance</h2>
+        <p>Ringkasan performa konten Instagram dari Meta Graph API atau file ekspor Meta Business Suite.</p>
+      </div>
+      <select className="feature-select" value={postFilter} onChange={(e) => setPostFilter(e.target.value)}>
+        <option>All</option><option>Reel</option><option>Carousel</option><option>Video</option><option>Image</option>
+      </select>
     </div>
-    <div className="source-note">Data source: migrated static content snapshot. Belum terhubung ke Instagram API.</div>
-    <div className="content-insight-grid">
-      <article className="social-subcard"><div className="panel-head"><div><h2>Format contribution</h2><p>Kontribusi pada source dashboard</p></div></div>
-        {[{label:"Reels",value:42},{label:"Carousels",value:36},{label:"Images",value:14},{label:"Stories",value:8}].map((item)=><div className="progress-stat" key={item.label}><div><strong>{item.label}</strong><span>{item.value}%</span></div><div className="progress-track"><i style={{width:`${item.value}%`}}/></div></div>)}
-        <div className="format-total"><strong>{totalEngagement}</strong><span>total interactions in sample</span></div>
-      </article>
-      <article className="social-subcard top-post-card"><div className="panel-head"><div><h2>Highlighted post</h2><p>Template post dari source existing</p></div><span className="feature-badge">Source behavior</span></div><strong>{highlightedPost.title}</strong><div className="top-post-metrics"><span><b>{highlightedPost.reach}</b> reach</span><span><b>{highlightedPost.saves}</b> saves</span><span><b>{highlightedPost.shares}</b> shares</span></div><p>Gunakan struktur carousel ini sebagai template untuk topik process improvement dan strategy execution.</p></article>
-    </div>
-    <div className="social-table-wrap"><table className="social-table"><thead><tr><th>Konten</th><th>Format</th><th>Reach</th><th>Engagement</th><th>ER / reach</th></tr></thead><tbody>{filteredPosts.map((post)=>{const engagement=post.likes+post.comments+post.saves+post.shares;return <tr key={post.id}><td><strong>{post.title}</strong><small>{new Date(`${post.date}T00:00:00`).toLocaleDateString("id-ID",{day:"numeric",month:"short"})}</small></td><td><span className={`content-type ${post.type.toLowerCase()}`}>{post.type}</span></td><td>{fmt.format(post.reach)}</td><td>{engagement}</td><td>{(engagement/Math.max(1,post.reach)*100).toFixed(1)}%</td></tr>})}</tbody></table></div>
+
+    <MetaCsvUpload onImported={() => void refresh()} hasImport={hasImportedCsv} />
+
+    {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
+    {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}
+    {data && <div className="source-note">Sumber: {data.source} · @{data.account?.username || "instagram"} · Sinkron terakhir {new Date(data.synced_at).toLocaleString("id-ID")}</div>}
+    {data?.warnings?.map((warning) => <div className="source-note warning" key={warning}>{warning}</div>)}
+
+    {data && <>
+      <div className="audience-summary">
+        <div><span>Reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
+        <div><span>Views</span><strong>{fmt.format(data.summary.views)}</strong></div>
+        <div><span>Interactions</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
+        <div><span>Content</span><strong>{fmt.format(data.media.length)}</strong></div>
+      </div>
+
+      <div className="content-insight-grid">
+        <article className="social-subcard">
+          <div className="panel-head"><div><h2>Interactions</h2><p>Breakdown performa konten terbaru</p></div></div>
+          {[{label:"Likes",value:data.summary.likes},{label:"Comments",value:data.summary.comments},{label:"Saves",value:data.summary.saved},{label:"Shares",value:data.summary.shares}].map((item) => {
+            const max = Math.max(1, data.summary.likes, data.summary.comments, data.summary.saved, data.summary.shares);
+            const width = Math.max(4, Math.round((item.value / max) * 100));
+            return <div className="progress-stat" key={item.label}><div><strong>{item.label}</strong><span>{fmt.format(item.value)}</span></div><div className="progress-track"><i style={{width:`${width}%`}}/></div></div>;
+          })}
+        </article>
+
+        <article className="social-subcard top-post-card">
+          <div className="panel-head"><div><h2>Top content</h2><p>Konten dengan interaksi tertinggi</p></div><span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span></div>
+          {highlightedPost ? <>
+            <strong>{highlightedPost.caption?.trim().slice(0,140) || "Instagram content"}</strong>
+            <div className="top-post-metrics">
+              <span><b>{fmt.format(highlightedPost.reach)}</b> reach</span>
+              <span><b>{fmt.format(highlightedPost.interactions)}</b> interactions</span>
+              <span><b>{highlightedPost.engagement_rate.toFixed(1)}%</b> ER</span>
+            </div>
+            {highlightedPost.permalink && <a href={highlightedPost.permalink} target="_blank" rel="noreferrer">Buka di Instagram →</a>}
+          </> : <p>Belum ada media yang dikembalikan Meta.</p>}
+        </article>
+      </div>
+
+      <div className="social-table-wrap"><table className="social-table"><thead><tr><th>Konten</th><th>Format</th><th>Reach</th><th>Views</th><th>Interactions</th><th>ER / reach</th></tr></thead><tbody>
+        {filteredPosts.map((post) => <tr key={post.id}>
+          <td><strong>{post.caption?.trim().slice(0,90) || "Instagram content"}</strong><small>{post.timestamp ? new Date(post.timestamp).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}) : "-"}</small></td>
+          <td><span className={`content-type ${formatType(post).toLowerCase()}`}>{formatType(post)}</span></td>
+          <td>{fmt.format(post.reach)}</td>
+          <td>{fmt.format(post.views)}</td>
+          <td>{fmt.format(post.interactions)}</td>
+          <td>{post.engagement_rate.toFixed(1)}%</td>
+        </tr>)}
+      </tbody></table></div>
+    </>}
   </section>;
 }
