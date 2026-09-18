@@ -290,8 +290,22 @@ export function importMetaBusinessSuiteCsvFiles(files: Array<{ fileName: string;
     shares: total.shares + item.shares,
   }), { reach: 0, impressions: 0, profile_visits: 0, link_clicks: 0, views: 0, interactions: 0, likes: 0, comments: 0, saved: 0, shares: 0 });
   const firstAccount = payloads.find((payload) => payload.account.username || payload.account.name)?.account;
-  const followersGained = dataMode === "timeseries" && available.has("followers")
-    ? media.reduce((sum, item) => sum + (item.followers || 0), 0)
+  const followerSeries = payloads.filter((payload) => payload.data_mode === "timeseries" && payload.available_metrics?.includes("followers"));
+  const followersByDate = new Map<string, number>();
+  let followersWithoutDate = 0;
+  for (const payload of followerSeries) {
+    for (const item of payload.media) {
+      const value = item.followers || 0;
+      if (item.timestamp) {
+        const dateKey = normalize(item.timestamp);
+        followersByDate.set(dateKey, Math.max(followersByDate.get(dateKey) || 0, value));
+      } else {
+        followersWithoutDate += value;
+      }
+    }
+  }
+  const followersGained = followerSeries.length
+    ? [...followersByDate.values()].reduce((sum, value) => sum + value, followersWithoutDate)
     : undefined;
 
   return {
