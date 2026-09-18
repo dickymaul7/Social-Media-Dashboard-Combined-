@@ -23,6 +23,7 @@ function instagramEmbedUrl(permalink?: string | null) {
 export function ContentPerformance() {
   const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
   const isCsv = data?.source.startsWith("CSV") || false;
+  const useImpressions = isCsv && Boolean(data?.available_metrics?.includes("impressions"));
 
   const highlightedPost = useMemo(() => {
     if (!data?.media?.length) return null;
@@ -82,7 +83,7 @@ export function ContentPerformance() {
     {data && <>
       <div className="audience-summary">
         <div><span>Reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
-        <div><span>{isCsv ? "Impressions" : "Views"}</span><strong>{fmt.format(isCsv ? data.summary.impressions || 0 : data.summary.views)}</strong></div>
+        <div><span>{useImpressions ? "Impressions" : "Views"}</span><strong>{fmt.format(useImpressions ? data.summary.impressions || 0 : data.summary.views || 0)}</strong></div>
         <div><span>Engagement</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
         <div><span>{data.data_mode === "timeseries" ? "Data points" : "Content"}</span><strong>{fmt.format(data.media.length)}</strong></div>
       </div>
