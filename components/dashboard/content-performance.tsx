@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Instagram } from "lucide-react";
 import { MetaCsvUpload } from "./meta-csv-upload";
 import { useMetaAnalytics } from "./use-meta-analytics";
 
@@ -37,6 +38,10 @@ export function ContentPerformance() {
     ...(data.available_metrics?.includes("link_clicks") ? [{ label: "Link clicks", value: data.summary.link_clicks || 0 }] : []),
   ] : [];
   const highlightedEmbedUrl = instagramEmbedUrl(highlightedPost?.permalink);
+  const rawUsername = data?.account?.username?.trim() || "";
+  const validUsername = /^[a-z0-9._]+$/i.test(rawUsername) ? rawUsername.replace(/^@/, "") : "";
+  const accountName = data?.account?.name || (!validUsername ? rawUsername : "") || (validUsername ? `@${validUsername}` : "Akun Instagram");
+  const hasFollowersGained = typeof data?.account?.followers_gained === "number";
 
   return <section className="panel dashboard-module">
     <div className="feature-head">
@@ -51,7 +56,27 @@ export function ContentPerformance() {
 
     {loading && <div className="source-note">Mengambil data terbaru dari Meta Graph API…</div>}
     {error && <div className="source-note" style={{color:"#a3152d"}}>{error}</div>}
-    {data && <div className="source-note">Sumber: {data.source} · @{data.account?.username || "instagram"} · Sinkron terakhir {new Date(data.synced_at).toLocaleString("id-ID")}</div>}
+    {data && <div className="meta-account-card">
+      <div className="meta-account-avatar"><Instagram size={22} /></div>
+      <div className="meta-account-identity">
+        <span>AKUN INSTAGRAM</span>
+        <strong>{accountName}</strong>
+        <small>{validUsername ? `@${validUsername}` : "Username tidak tersedia pada file CSV"}</small>
+      </div>
+      <div className="meta-account-stat">
+        <span>{hasFollowersGained ? "Followers gained" : "Followers"}</span>
+        <strong>{fmt.format(hasFollowersGained ? data.account.followers_gained || 0 : data.account.followers_count || 0)}</strong>
+      </div>
+      <div className="meta-account-stat">
+        <span>{data.data_mode === "timeseries" ? "Data points" : "Content"}</span>
+        <strong>{fmt.format(data.media.length)}</strong>
+      </div>
+      <div className="meta-account-source">
+        <span>{data.source.startsWith("CSV") ? "CSV IMPORT" : "LIVE META"}</span>
+        <strong>{data.source.replace("CSV Meta Business Suite · ", "")}</strong>
+        <small>Sinkron {new Date(data.synced_at).toLocaleString("id-ID")}</small>
+      </div>
+    </div>}
     {data?.warnings?.map((warning) => <div className="source-note warning" key={warning}>{warning}</div>)}
 
     {data && <>
