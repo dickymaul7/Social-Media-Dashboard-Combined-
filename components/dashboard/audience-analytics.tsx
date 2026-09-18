@@ -9,6 +9,7 @@ const fmt = new Intl.NumberFormat("id-ID");
 export function AudienceAnalytics() {
   const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
   const hasFollowersGained = typeof data?.account?.followers_gained === "number";
+  const useImpressions = Boolean(data?.source.startsWith("CSV") && data.available_metrics?.includes("impressions"));
 
   const avgReach = useMemo(() => {
     if (!data?.media?.length) return 0;
@@ -42,7 +43,7 @@ export function AudienceAnalytics() {
         <div><span>{hasFollowersGained ? "Followers gained" : "Followers"}</span><strong>{fmt.format(hasFollowersGained ? data.account.followers_gained || 0 : data.account?.followers_count || 0)}</strong></div>
         <div><span>Total reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
         <div><span>Total engagement</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
-        <div><span>{data.source.startsWith("CSV") ? "Impressions" : "Views"}</span><strong>{fmt.format(data.source.startsWith("CSV") ? data.summary.impressions || 0 : data.summary.views)}</strong></div>
+        <div><span>{useImpressions ? "Impressions" : "Views"}</span><strong>{fmt.format(useImpressions ? data.summary.impressions || 0 : data.summary.views || 0)}</strong></div>
       </div>
 
       <div className="audience-grid">
