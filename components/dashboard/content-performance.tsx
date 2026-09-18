@@ -17,6 +17,7 @@ function formatType(item: MetaMedia) {
 export function ContentPerformance() {
   const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
   const [postFilter, setPostFilter] = useState("All");
+  const isCsv = data?.source.startsWith("CSV") || false;
 
   const filteredPosts = useMemo(() => {
     if (!data) return [];
@@ -50,8 +51,8 @@ export function ContentPerformance() {
     {data && <>
       <div className="audience-summary">
         <div><span>Reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
-        <div><span>Views</span><strong>{fmt.format(data.summary.views)}</strong></div>
-        <div><span>Interactions</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
+        <div><span>{isCsv ? "Impressions" : "Views"}</span><strong>{fmt.format(isCsv ? data.summary.impressions || 0 : data.summary.views)}</strong></div>
+        <div><span>Engagement</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
         <div><span>Content</span><strong>{fmt.format(data.media.length)}</strong></div>
       </div>
 
@@ -79,12 +80,12 @@ export function ContentPerformance() {
         </article>
       </div>
 
-      <div className="social-table-wrap"><table className="social-table"><thead><tr><th>Konten</th><th>Format</th><th>Reach</th><th>Views</th><th>Interactions</th><th>ER / reach</th></tr></thead><tbody>
+      <div className="social-table-wrap"><table className="social-table"><thead><tr><th>Konten</th><th>Format</th><th>Reach</th><th>{isCsv ? "Impressions" : "Views"}</th><th>Engagement</th><th>ER / reach</th></tr></thead><tbody>
         {filteredPosts.map((post) => <tr key={post.id}>
           <td><strong>{post.caption?.trim().slice(0,90) || "Instagram content"}</strong><small>{post.timestamp ? new Date(post.timestamp).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}) : "-"}</small></td>
           <td><span className={`content-type ${formatType(post).toLowerCase()}`}>{formatType(post)}</span></td>
           <td>{fmt.format(post.reach)}</td>
-          <td>{fmt.format(post.views)}</td>
+          <td>{fmt.format(isCsv ? post.impressions || 0 : post.views)}</td>
           <td>{fmt.format(post.interactions)}</td>
           <td>{post.engagement_rate.toFixed(1)}%</td>
         </tr>)}
