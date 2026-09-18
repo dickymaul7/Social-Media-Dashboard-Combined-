@@ -15,6 +15,19 @@ function formatType(item: MetaMedia) {
   return "Image";
 }
 
+function instagramEmbedUrl(permalink?: string | null) {
+  if (!permalink) return null;
+  try {
+    const url = new URL(permalink);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (hostname !== "instagram.com" || !/^\/(p|reel|tv)\//.test(url.pathname)) return null;
+    const pathname = url.pathname.replace(/\/(embed)?\/?$/, "/");
+    return `https://www.instagram.com${pathname}embed/`;
+  } catch {
+    return null;
+  }
+}
+
 export function ContentPerformance() {
   const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
   const [postFilter, setPostFilter] = useState("All");
@@ -38,6 +51,7 @@ export function ContentPerformance() {
     ...(data.available_metrics?.includes("profile_visits") ? [{ label: "Profile visits", value: data.summary.profile_visits || 0 }] : []),
     ...(data.available_metrics?.includes("link_clicks") ? [{ label: "Link clicks", value: data.summary.link_clicks || 0 }] : []),
   ] : [];
+  const highlightedEmbedUrl = instagramEmbedUrl(highlightedPost?.permalink);
 
   return <section className="panel dashboard-module">
     <div className="feature-head">
@@ -80,12 +94,20 @@ export function ContentPerformance() {
           <div className="panel-head"><div><h2>{data.data_mode === "timeseries" ? "Peak period" : "Top content"}</h2><p>{data.data_mode === "timeseries" ? "Periode dengan interaksi tertinggi" : "Konten dengan interaksi tertinggi"}</p></div><span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span></div>
           {highlightedPost ? <>
             <strong>{highlightedPost.caption?.trim().slice(0,140) || "Instagram content"}</strong>
+            {highlightedEmbedUrl && <div className="instagram-preview">
+              <iframe
+                src={highlightedEmbedUrl}
+                title="Preview konten Instagram teratas"
+                loading="lazy"
+                allow="encrypted-media"
+              />
+            </div>}
             <div className="top-post-metrics">
               <span><b>{fmt.format(highlightedPost.reach)}</b> reach</span>
               <span><b>{fmt.format(highlightedPost.interactions)}</b> interactions</span>
               <span><b>{highlightedPost.engagement_rate.toFixed(1)}%</b> ER</span>
             </div>
-            {highlightedPost.permalink && <a href={highlightedPost.permalink} target="_blank" rel="noreferrer">Buka di Instagram →</a>}
+            {highlightedPost.permalink && <a className="instagram-open-link" href={highlightedPost.permalink} target="_blank" rel="noreferrer">Buka di Instagram →</a>}
           </> : <p>Belum ada media yang dikembalikan Meta.</p>}
         </article>
       </div>
