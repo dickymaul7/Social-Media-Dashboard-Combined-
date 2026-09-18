@@ -52,6 +52,8 @@ export function AudienceAnalytics() {
           <div className="location-row"><span>Nama akun</span><strong>{data.account?.name || "-"}</strong></div>
           <div className="location-row"><span>{hasFollowersGained ? "Followers gained" : "Followers"}</span><strong>{fmt.format(hasFollowersGained ? data.account.followers_gained || 0 : data.account?.followers_count || 0)}</strong></div>
           <div className="location-row"><span>{data.data_mode === "timeseries" ? "Data points" : "Media published"}</span><strong>{fmt.format(data.account?.media_count || 0)}</strong></div>
+          {data.available_metrics?.includes("profile_visits") && <div className="location-row"><span>Profile visits</span><strong>{fmt.format(data.summary.profile_visits || 0)}</strong></div>}
+          {data.available_metrics?.includes("link_clicks") && <div className="location-row"><span>Link clicks</span><strong>{fmt.format(data.summary.link_clicks || 0)}</strong></div>}
         </article>
 
         <article className="social-subcard">
