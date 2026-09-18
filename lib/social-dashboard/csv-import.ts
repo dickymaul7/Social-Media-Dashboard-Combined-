@@ -79,14 +79,15 @@ const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "
 const aliases = {
   reach: ["reach", "accountsreached", "postreach", "totalreach", "jangkauan", "akunyangdijangkau"],
   impressions: ["impressions", "impression", "postimpressions", "totalimpressions", "tayangan"],
+  views: ["views", "view", "contentviews", "plays", "videoplays", "videoviews", "tontonan", "pemutaran"],
   interactions: ["interactions", "totalinteractions", "contentinteractions", "postengagement", "engagement", "engagements", "interaksi", "interaksikonten", "reactionscommentsshares"],
-  followers: ["followers", "followerscount", "totalfollowers", "lifetimefollowers", "instagramfollowers", "pengikut", "totalpengikut"],
+  followers: ["followers", "follows", "follow", "followerscount", "totalfollowers", "lifetimefollowers", "instagramfollowers", "instagramfollows", "pengikut", "totalpengikut"],
   profileVisits: ["profilevisits", "instagramprofilevisits", "visits", "kunjunganprofil", "kunjunganprofilinstagram", "kunjungan"],
   linkClicks: ["linkclicks", "instagramlinkclicks", "clicks", "kliktautan", "kliktautaninstagram"],
   date: ["timestamp", "published", "publishtime", "date", "day", "createdtime", "tanggal", "hari", "waktu", "periode"],
 };
 
-type MetricKey = "reach" | "impressions" | "interactions" | "followers" | "profile_visits" | "link_clicks";
+type MetricKey = "reach" | "impressions" | "views" | "interactions" | "followers" | "profile_visits" | "link_clicks";
 
 function metricFromFileName(fileName: string): MetricKey | null {
   const name = normalize(fileName.replace(/\.csv$/i, ""));
@@ -94,6 +95,7 @@ function metricFromFileName(fileName: string): MetricKey | null {
   if (aliases.profileVisits.some((alias) => name.includes(alias))) return "profile_visits";
   if (aliases.interactions.some((alias) => name.includes(alias))) return "interactions";
   if (aliases.impressions.some((alias) => name.includes(alias))) return "impressions";
+  if (aliases.views.some((alias) => name.includes(alias))) return "views";
   if (aliases.followers.some((alias) => name.includes(alias))) return "followers";
   if (aliases.reach.some((alias) => name.includes(alias))) return "reach";
   return null;
@@ -107,7 +109,7 @@ function warningsFor(available: Set<string>) {
   const warnings: string[] = [];
   if (!available.has("reach")) warnings.push("Kolom Reach/Jangkauan belum ditemukan pada kumpulan CSV ini.");
   if (!available.has("interactions")) warnings.push("Kolom Engagement/Interactions belum ditemukan; total hanya dihitung jika komponen interaksi tersedia.");
-  if (!available.has("impressions")) warnings.push("Kolom Impressions/Tayangan belum ditemukan pada kumpulan CSV ini.");
+  if (!available.has("impressions") && !available.has("views")) warnings.push("Kolom Impressions/Tayangan/Views belum ditemukan pada kumpulan CSV ini.");
   if (!available.has("followers")) warnings.push("Kolom Followers/Pengikut belum tersedia pada kumpulan CSV ini.");
   return warnings;
 }
@@ -142,7 +144,7 @@ export function importMetaBusinessSuiteCsv(fileName: string, text: string): Anal
   const rows = parseCsv(text);
   if (rows.length < 2) throw new Error("CSV belum berisi header dan baris data.");
   const inferredMetric = metricFromFileName(fileName);
-  const knownHeaders = ["reach", "jangkauan", "impressions", "tayangan", "views", "interactions", "engagement", "interaksi", "followers", "pengikut", "profilevisits", "kunjungan", "linkclicks", "kliktautan", "date", "tanggal", "waktu", "periode", "value", "nilai", "primary", "utama", "caption", "description", "postid", "mediaid"];
+  const knownHeaders = ["reach", "jangkauan", "impressions", "tayangan", "views", "interactions", "engagement", "interaksi", "followers", "follows", "pengikut", "profilevisits", "kunjungan", "linkclicks", "kliktautan", "date", "tanggal", "waktu", "periode", "value", "nilai", "primary", "utama", "caption", "description", "postid", "mediaid"];
   const headerIndex = rows.slice(0, 10).reduce((best, cells, index) => {
     const score = cells.map(normalize).filter((cell) => knownHeaders.some((known) => cell === known || cell.includes(known))).length;
     return score > best.score ? { index, score } : best;
@@ -151,12 +153,13 @@ export function importMetaBusinessSuiteCsv(fileName: string, text: string): Anal
   const available = new Set<string>();
   if (hasHeader(headers, aliases.reach)) available.add("reach");
   if (hasHeader(headers, aliases.impressions)) available.add("impressions");
+  if (hasHeader(headers, aliases.views)) available.add("views");
   if (hasHeader(headers, aliases.interactions)) available.add("interactions");
   if (hasHeader(headers, aliases.followers)) available.add("followers");
   if (hasHeader(headers, aliases.profileVisits)) available.add("profile_visits");
   if (hasHeader(headers, aliases.linkClicks)) available.add("link_clicks");
   if (inferredMetric) available.add(inferredMetric);
-  const hasUsableMetric = available.size > 0 || hasHeader(headers, ["views", "contentviews", "plays", "videoplays", "videoviews", "tontonan", "pemutaran", "likes", "reactions", "suka", "comments", "komentar", "saves", "saved", "disimpan", "shares", "dibagikan"]);
+  const hasUsableMetric = available.size > 0 || hasHeader(headers, ["likes", "reactions", "suka", "comments", "komentar", "saves", "saved", "disimpan", "shares", "dibagikan"]);
   if (!hasUsableMetric) throw new Error("Kolom metrik tidak ditemukan. Gunakan CSV ekspor Content atau Insights dari Meta Business Suite.");
   const hasContentIdentity = hasHeader(headers, ["caption", "description", "postid", "mediaid", "contentid", "permalink", "judul", "keterangan"]);
   const dataMode: "content" | "timeseries" = (hasHeader(headers, aliases.date) || Boolean(inferredMetric)) && !hasContentIdentity ? "timeseries" : "content";
@@ -170,7 +173,7 @@ export function importMetaBusinessSuiteCsv(fileName: string, text: string): Anal
     const shares = numeric(valueFor(row, ["shares", "share", "dibagikan", "bagikan"]));
     const reach = metricValue("reach", aliases.reach);
     const impressions = metricValue("impressions", aliases.impressions);
-    const views = numeric(valueFor(row, ["views", "contentviews", "plays", "videoplays", "videoviews", "tontonan", "pemutaran"]));
+    const views = metricValue("views", aliases.views);
     const listedInteractions = metricValue("interactions", aliases.interactions);
     const interactions = listedInteractions || likes + comments + saved + shares;
     const followers = metricValue("followers", aliases.followers);
