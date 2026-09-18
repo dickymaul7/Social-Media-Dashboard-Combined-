@@ -39,9 +39,9 @@ export function AudienceAnalytics() {
     {data && <>
       <div className="audience-summary">
         <div><span>Followers</span><strong>{fmt.format(data.account?.followers_count || 0)}</strong></div>
-        <div><span>Total content</span><strong>{fmt.format(data.account?.media_count || 0)}</strong></div>
-        <div><span>Reach konten terbaru</span><strong>{fmt.format(data.summary.reach)}</strong></div>
-        <div><span>Views konten terbaru</span><strong>{fmt.format(data.summary.views)}</strong></div>
+        <div><span>Total reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
+        <div><span>Total engagement</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
+        <div><span>{data.source.startsWith("CSV") ? "Impressions" : "Views"}</span><strong>{fmt.format(data.source.startsWith("CSV") ? data.summary.impressions || 0 : data.summary.views)}</strong></div>
       </div>
 
       <div className="audience-grid">
