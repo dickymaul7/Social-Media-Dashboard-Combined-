@@ -3,6 +3,18 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { clearImportedAnalytics, importMetaBusinessSuiteCsvFiles, saveImportedAnalytics } from "@/lib/social-dashboard/csv-import";
 
+async function readCsvText(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let oddNullBytes = 0;
+  for (let index = 1; index < Math.min(bytes.length, 200); index += 2) if (bytes[index] === 0) oddNullBytes += 1;
+  const isUtf16Le = (bytes[0] === 0xff && bytes[1] === 0xfe) || oddNullBytes > 20;
+  const isUtf16Be = bytes[0] === 0xfe && bytes[1] === 0xff;
+  if (isUtf16Le) return new TextDecoder("utf-16le").decode(buffer);
+  if (isUtf16Be) return new TextDecoder("utf-16be").decode(buffer);
+  return new TextDecoder("utf-8").decode(buffer);
+}
+
 export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => void; hasImport: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
@@ -12,7 +24,7 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
     const invalid = files.find((file) => !file.name.toLowerCase().endsWith(".csv"));
     if (invalid) { setStatus(`${invalid.name} bukan file CSV.`); return; }
     try {
-      const analytics = importMetaBusinessSuiteCsvFiles(await Promise.all(files.map(async (file) => ({ fileName: file.name, text: await file.text() }))));
+      const analytics = importMetaBusinessSuiteCsvFiles(await Promise.all(files.map(async (file) => ({ fileName: file.name, text: await readCsvText(file) }))));
       saveImportedAnalytics(analytics);
       setStatus(`${files.length} file CSV selesai diproses menjadi ${analytics.media.length} baris data.`);
       onImported();
