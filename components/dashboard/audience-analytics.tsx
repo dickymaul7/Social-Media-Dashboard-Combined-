@@ -8,6 +8,7 @@ const fmt = new Intl.NumberFormat("id-ID");
 
 export function AudienceAnalytics() {
   const { data, loading, error, refresh, hasImportedCsv } = useMetaAnalytics();
+  const hasFollowersGained = typeof data?.account?.followers_gained === "number";
 
   const avgReach = useMemo(() => {
     if (!data?.media?.length) return 0;
@@ -38,7 +39,7 @@ export function AudienceAnalytics() {
 
     {data && <>
       <div className="audience-summary">
-        <div><span>Followers</span><strong>{fmt.format(data.account?.followers_count || 0)}</strong></div>
+        <div><span>{hasFollowersGained ? "Followers gained" : "Followers"}</span><strong>{fmt.format(hasFollowersGained ? data.account.followers_gained || 0 : data.account?.followers_count || 0)}</strong></div>
         <div><span>Total reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
         <div><span>Total engagement</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
         <div><span>{data.source.startsWith("CSV") ? "Impressions" : "Views"}</span><strong>{fmt.format(data.source.startsWith("CSV") ? data.summary.impressions || 0 : data.summary.views)}</strong></div>
@@ -49,8 +50,8 @@ export function AudienceAnalytics() {
           <div className="panel-head"><div><h2>Account overview</h2><p>Ringkasan akun Instagram</p></div></div>
           <div className="location-row"><span>Username</span><strong>@{data.account?.username || "-"}</strong></div>
           <div className="location-row"><span>Nama akun</span><strong>{data.account?.name || "-"}</strong></div>
-          <div className="location-row"><span>Followers</span><strong>{fmt.format(data.account?.followers_count || 0)}</strong></div>
-          <div className="location-row"><span>Media published</span><strong>{fmt.format(data.account?.media_count || 0)}</strong></div>
+          <div className="location-row"><span>{hasFollowersGained ? "Followers gained" : "Followers"}</span><strong>{fmt.format(hasFollowersGained ? data.account.followers_gained || 0 : data.account?.followers_count || 0)}</strong></div>
+          <div className="location-row"><span>{data.data_mode === "timeseries" ? "Data points" : "Media published"}</span><strong>{fmt.format(data.account?.media_count || 0)}</strong></div>
         </article>
 
         <article className="social-subcard">
