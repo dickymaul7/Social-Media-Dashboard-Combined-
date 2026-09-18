@@ -8,6 +8,7 @@ import type { AnalyticsMedia as MetaMedia } from "@/lib/social-dashboard/csv-imp
 const fmt = new Intl.NumberFormat("id-ID");
 
 function formatType(item: MetaMedia) {
+  if (item.media_type === "TIMESERIES") return "Data";
   if (item.media_product_type === "REELS" || item.media_type === "REELS" || item.media_type === "REEL") return "Reel";
   if (item.media_type === "CAROUSEL_ALBUM" || item.media_type === "CAROUSEL") return "Carousel";
   if (item.media_type === "VIDEO") return "Video";
@@ -37,7 +38,7 @@ export function ContentPerformance() {
         <p>Ringkasan performa konten Instagram dari Meta Graph API atau file ekspor Meta Business Suite.</p>
       </div>
       <select className="feature-select" value={postFilter} onChange={(e) => setPostFilter(e.target.value)}>
-        <option>All</option><option>Reel</option><option>Carousel</option><option>Video</option><option>Image</option>
+        <option>All</option><option>Data</option><option>Reel</option><option>Carousel</option><option>Video</option><option>Image</option>
       </select>
     </div>
 
@@ -53,7 +54,7 @@ export function ContentPerformance() {
         <div><span>Reach</span><strong>{fmt.format(data.summary.reach)}</strong></div>
         <div><span>{isCsv ? "Impressions" : "Views"}</span><strong>{fmt.format(isCsv ? data.summary.impressions || 0 : data.summary.views)}</strong></div>
         <div><span>Engagement</span><strong>{fmt.format(data.summary.interactions)}</strong></div>
-        <div><span>Content</span><strong>{fmt.format(data.media.length)}</strong></div>
+        <div><span>{data.data_mode === "timeseries" ? "Data points" : "Content"}</span><strong>{fmt.format(data.media.length)}</strong></div>
       </div>
 
       <div className="content-insight-grid">
@@ -67,7 +68,7 @@ export function ContentPerformance() {
         </article>
 
         <article className="social-subcard top-post-card">
-          <div className="panel-head"><div><h2>Top content</h2><p>Konten dengan interaksi tertinggi</p></div><span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span></div>
+          <div className="panel-head"><div><h2>{data.data_mode === "timeseries" ? "Peak period" : "Top content"}</h2><p>{data.data_mode === "timeseries" ? "Periode dengan interaksi tertinggi" : "Konten dengan interaksi tertinggi"}</p></div><span className="feature-badge">{data.source.startsWith("CSV") ? "CSV Import" : "Live Meta"}</span></div>
           {highlightedPost ? <>
             <strong>{highlightedPost.caption?.trim().slice(0,140) || "Instagram content"}</strong>
             <div className="top-post-metrics">
