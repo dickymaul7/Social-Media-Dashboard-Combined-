@@ -30,6 +30,15 @@ export function ContentPerformance() {
     return [...data.media].sort((a, b) => b.interactions - a.interactions)[0];
   }, [data]);
 
+  const activityBreakdown = data ? [
+    { label: "Likes", value: data.summary.likes },
+    { label: "Comments", value: data.summary.comments },
+    { label: "Saves", value: data.summary.saved },
+    { label: "Shares", value: data.summary.shares },
+    ...(data.available_metrics?.includes("profile_visits") ? [{ label: "Profile visits", value: data.summary.profile_visits || 0 }] : []),
+    ...(data.available_metrics?.includes("link_clicks") ? [{ label: "Link clicks", value: data.summary.link_clicks || 0 }] : []),
+  ] : [];
+
   return <section className="panel dashboard-module">
     <div className="feature-head">
       <div>
@@ -59,9 +68,9 @@ export function ContentPerformance() {
 
       <div className="content-insight-grid">
         <article className="social-subcard">
-          <div className="panel-head"><div><h2>Interactions</h2><p>Breakdown performa konten terbaru</p></div></div>
-          {[{label:"Likes",value:data.summary.likes},{label:"Comments",value:data.summary.comments},{label:"Saves",value:data.summary.saved},{label:"Shares",value:data.summary.shares}].map((item) => {
-            const max = Math.max(1, data.summary.likes, data.summary.comments, data.summary.saved, data.summary.shares);
+          <div className="panel-head"><div><h2>Activity breakdown</h2><p>Breakdown performa dari data yang tersedia</p></div></div>
+          {activityBreakdown.map((item) => {
+            const max = Math.max(1, ...activityBreakdown.map((metric) => metric.value));
             const width = Math.max(4, Math.round((item.value / max) * 100));
             return <div className="progress-stat" key={item.label}><div><strong>{item.label}</strong><span>{fmt.format(item.value)}</span></div><div className="progress-track"><i style={{width:`${width}%`}}/></div></div>;
           })}
