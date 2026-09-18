@@ -14,14 +14,14 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
     try {
       const analytics = importMetaBusinessSuiteCsvFiles(await Promise.all(files.map(async (file) => ({ fileName: file.name, text: await file.text() }))));
       saveImportedAnalytics(analytics);
-      setStatus(`${files.length} file CSV berhasil digabung menjadi ${analytics.media.length} baris data.`);
+      setStatus(`${files.length} file CSV selesai diproses menjadi ${analytics.media.length} baris data.`);
       onImported();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "CSV tidak dapat diproses.");
     } finally { event.target.value = ""; }
   };
   return <div className="csv-import">
-    <div><strong>Impor CSV Meta Business Suite</strong><span>Pilih satu atau beberapa CSV. File Tayangan, Jangkauan, Interaksi, dan Pengikut akan digabung berdasarkan tanggal.</span></div>
+    <div><strong>Impor CSV Meta Business Suite</strong><span>Pilih satu atau beberapa CSV. File Tayangan, Jangkauan, Interaksi, Pengikut, Kunjungan, dan Klik Tautan akan digabung berdasarkan tanggal.</span></div>
     <div className="csv-import-actions">
       <input ref={inputRef} type="file" accept=".csv,text/csv" multiple onChange={onFile} hidden />
       <button type="button" className="ghost" onClick={() => inputRef.current?.click()}>Upload CSV Files</button>
