@@ -83,8 +83,21 @@ const aliases = {
   followers: ["followers", "followerscount", "totalfollowers", "lifetimefollowers", "instagramfollowers", "pengikut", "totalpengikut"],
   profileVisits: ["profilevisits", "instagramprofilevisits", "visits", "kunjunganprofil", "kunjunganprofilinstagram", "kunjungan"],
   linkClicks: ["linkclicks", "instagramlinkclicks", "clicks", "kliktautan", "kliktautaninstagram"],
-  date: ["timestamp", "published", "publishtime", "date", "day", "createdtime", "tanggal", "hari"],
+  date: ["timestamp", "published", "publishtime", "date", "day", "createdtime", "tanggal", "hari", "waktu", "periode"],
 };
+
+type MetricKey = "reach" | "impressions" | "interactions" | "followers" | "profile_visits" | "link_clicks";
+
+function metricFromFileName(fileName: string): MetricKey | null {
+  const name = normalize(fileName.replace(/\.csv$/i, ""));
+  if (aliases.linkClicks.some((alias) => name.includes(alias))) return "link_clicks";
+  if (aliases.profileVisits.some((alias) => name.includes(alias))) return "profile_visits";
+  if (aliases.interactions.some((alias) => name.includes(alias))) return "interactions";
+  if (aliases.impressions.some((alias) => name.includes(alias))) return "impressions";
+  if (aliases.followers.some((alias) => name.includes(alias))) return "followers";
+  if (aliases.reach.some((alias) => name.includes(alias))) return "reach";
+  return null;
+}
 
 function hasHeader(headers: string[], names: string[]) {
   return headers.some((header) => names.some((name) => header === name || header.includes(name)));
@@ -120,10 +133,16 @@ function valueFor(row: Record<string, string>, names: string[]) {
   return "";
 }
 
+function fallbackSeriesValue(row: Record<string, string>) {
+  const entries = Object.entries(row).filter(([key, value]) => value.trim() && !aliases.date.some((name) => key === name || key.includes(name)));
+  return entries.at(-1)?.[1] || "";
+}
+
 export function importMetaBusinessSuiteCsv(fileName: string, text: string): AnalyticsPayload {
   const rows = parseCsv(text);
   if (rows.length < 2) throw new Error("CSV belum berisi header dan baris data.");
-  const knownHeaders = ["reach", "jangkauan", "impressions", "tayangan", "views", "interactions", "engagement", "interaksi", "followers", "pengikut", "profilevisits", "kunjungan", "linkclicks", "kliktautan", "date", "tanggal", "caption", "description", "postid", "mediaid"];
+  const inferredMetric = metricFromFileName(fileName);
+  const knownHeaders = ["reach", "jangkauan", "impressions", "tayangan", "views", "interactions", "engagement", "interaksi", "followers", "pengikut", "profilevisits", "kunjungan", "linkclicks", "kliktautan", "date", "tanggal", "waktu", "periode", "value", "nilai", "primary", "utama", "caption", "description", "postid", "mediaid"];
   const headerIndex = rows.slice(0, 10).reduce((best, cells, index) => {
     const score = cells.map(normalize).filter((cell) => knownHeaders.some((known) => cell === known || cell.includes(known))).length;
     return score > best.score ? { index, score } : best;
@@ -136,24 +155,27 @@ export function importMetaBusinessSuiteCsv(fileName: string, text: string): Anal
   if (hasHeader(headers, aliases.followers)) available.add("followers");
   if (hasHeader(headers, aliases.profileVisits)) available.add("profile_visits");
   if (hasHeader(headers, aliases.linkClicks)) available.add("link_clicks");
+  if (inferredMetric) available.add(inferredMetric);
   const hasUsableMetric = available.size > 0 || hasHeader(headers, ["views", "contentviews", "plays", "videoplays", "videoviews", "tontonan", "pemutaran", "likes", "reactions", "suka", "comments", "komentar", "saves", "saved", "disimpan", "shares", "dibagikan"]);
   if (!hasUsableMetric) throw new Error("Kolom metrik tidak ditemukan. Gunakan CSV ekspor Content atau Insights dari Meta Business Suite.");
   const hasContentIdentity = hasHeader(headers, ["caption", "description", "postid", "mediaid", "contentid", "permalink", "judul", "keterangan"]);
-  const dataMode: "content" | "timeseries" = hasHeader(headers, aliases.date) && !hasContentIdentity ? "timeseries" : "content";
+  const dataMode: "content" | "timeseries" = (hasHeader(headers, aliases.date) || Boolean(inferredMetric)) && !hasContentIdentity ? "timeseries" : "content";
   const records = rows.slice(headerIndex + 1).map((cells) => Object.fromEntries(headers.map((header, index) => [header || `column${index}`, cells[index] || ""])));
   const media = records.map((row, index) => {
+    const inferredValue = inferredMetric ? fallbackSeriesValue(row) : "";
+    const metricValue = (metric: MetricKey, names: string[]) => numeric(valueFor(row, names) || (inferredMetric === metric ? inferredValue : ""));
     const likes = numeric(valueFor(row, ["likes", "reactions", "like", "likesandreactions", "suka", "reaksi"]));
     const comments = numeric(valueFor(row, ["comments", "comment", "komentar"]));
     const saved = numeric(valueFor(row, ["saves", "saved", "disimpan", "simpanan"]));
     const shares = numeric(valueFor(row, ["shares", "share", "dibagikan", "bagikan"]));
-    const reach = numeric(valueFor(row, aliases.reach));
-    const impressions = numeric(valueFor(row, aliases.impressions));
+    const reach = metricValue("reach", aliases.reach);
+    const impressions = metricValue("impressions", aliases.impressions);
     const views = numeric(valueFor(row, ["views", "contentviews", "plays", "videoplays", "videoviews", "tontonan", "pemutaran"]));
-    const listedInteractions = numeric(valueFor(row, aliases.interactions));
+    const listedInteractions = metricValue("interactions", aliases.interactions);
     const interactions = listedInteractions || likes + comments + saved + shares;
-    const followers = numeric(valueFor(row, aliases.followers));
-    const profileVisits = numeric(valueFor(row, aliases.profileVisits));
-    const linkClicks = numeric(valueFor(row, aliases.linkClicks));
+    const followers = metricValue("followers", aliases.followers);
+    const profileVisits = metricValue("profile_visits", aliases.profileVisits);
+    const linkClicks = metricValue("link_clicks", aliases.linkClicks);
     const timestamp = valueFor(row, aliases.date) || null;
     const caption = valueFor(row, ["caption", "title", "post", "content", "description", "judul", "keterangan"]) || (dataMode === "timeseries" && timestamp ? `Data ${timestamp}` : "Konten Meta Business Suite");
     const mediaType = valueFor(row, ["mediatype", "posttype", "contenttype", "type", "format", "jeniskonten"]).toUpperCase() || (dataMode === "timeseries" ? "TIMESERIES" : "UNKNOWN");
@@ -175,7 +197,7 @@ export function importMetaBusinessSuiteCsv(fileName: string, text: string): Anal
     reach: total.reach + item.reach, impressions: total.impressions + (item.impressions || 0), profile_visits: total.profile_visits + (item.profile_visits || 0), link_clicks: total.link_clicks + (item.link_clicks || 0), views: total.views + item.views, interactions: total.interactions + item.interactions,
     likes: total.likes + item.likes, comments: total.comments + item.comments, saved: total.saved + item.saved, shares: total.shares + item.shares,
   }), { reach: 0, impressions: 0, profile_visits: 0, link_clicks: 0, views: 0, interactions: 0, likes: 0, comments: 0, saved: 0, shares: 0 });
-  const followerValues = records.map((row) => numeric(valueFor(row, aliases.followers)));
+  const followerValues = media.map((item) => item.followers || 0);
   const followers = dataMode === "content" ? Math.max(...followerValues, 0) : 0;
   const followersGained = dataMode === "timeseries" && available.has("followers") ? followerValues.reduce((sum, value) => sum + value, 0) : undefined;
   const username = valueFor(records[0], ["username", "accountusername", "account", "instagramaccount", "namaakun"]);
