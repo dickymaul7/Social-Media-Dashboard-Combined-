@@ -11,6 +11,7 @@ export type AnalyticsMedia = {
   shares: number;
   reach: number;
   impressions?: number;
+  followers?: number;
   views: number;
   interactions: number;
   engagement_rate: number;
@@ -20,7 +21,9 @@ export type AnalyticsPayload = {
   source: string;
   synced_at: string;
   warnings?: string[];
-  account: { username?: string; name?: string; followers_count?: number; media_count?: number };
+  available_metrics?: string[];
+  data_mode?: "content" | "timeseries";
+  account: { username?: string; name?: string; followers_count?: number; followers_gained?: number; media_count?: number };
   summary: { reach: number; impressions?: number; views: number; interactions: number; likes: number; comments: number; saved: number; shares: number };
   media: AnalyticsMedia[];
 };
@@ -71,6 +74,27 @@ function parseCsv(text: string) {
 
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+const aliases = {
+  reach: ["reach", "accountsreached", "postreach", "totalreach", "jangkauan", "akunyangdijangkau"],
+  impressions: ["impressions", "impression", "postimpressions", "totalimpressions", "tayangan"],
+  interactions: ["interactions", "totalinteractions", "contentinteractions", "postengagement", "engagement", "engagements", "interaksi", "interaksikonten", "reactionscommentsshares"],
+  followers: ["followers", "followerscount", "totalfollowers", "lifetimefollowers", "instagramfollowers", "pengikut", "totalpengikut"],
+  date: ["timestamp", "published", "publishtime", "date", "day", "createdtime", "tanggal", "hari"],
+};
+
+function hasHeader(headers: string[], names: string[]) {
+  return headers.some((header) => names.some((name) => header === name || header.includes(name)));
+}
+
+function warningsFor(available: Set<string>) {
+  const warnings: string[] = [];
+  if (!available.has("reach")) warnings.push("Kolom Reach/Jangkauan belum ditemukan pada kumpulan CSV ini.");
+  if (!available.has("interactions")) warnings.push("Kolom Engagement/Interactions belum ditemukan; total hanya dihitung jika komponen interaksi tersedia.");
+  if (!available.has("impressions")) warnings.push("Kolom Impressions/Tayangan belum ditemukan pada kumpulan CSV ini.");
+  if (!available.has("followers")) warnings.push("Kolom Followers/Pengikut belum tersedia pada kumpulan CSV ini.");
+  return warnings;
+}
+
 function numeric(value: string | undefined) {
   const raw = String(value || "").trim();
   if (!raw) return 0;
@@ -95,25 +119,34 @@ function valueFor(row: Record<string, string>, names: string[]) {
 export function importMetaBusinessSuiteCsv(fileName: string, text: string): AnalyticsPayload {
   const rows = parseCsv(text);
   if (rows.length < 2) throw new Error("CSV belum berisi header dan baris data.");
-  const knownHeaders = ["reach", "jangkauan", "impressions", "tayangan", "views", "interactions", "engagement", "followers", "caption", "description", "postid", "mediaid"];
+  const knownHeaders = ["reach", "jangkauan", "impressions", "tayangan", "views", "interactions", "engagement", "interaksi", "followers", "pengikut", "date", "tanggal", "caption", "description", "postid", "mediaid"];
   const headerIndex = rows.slice(0, 10).reduce((best, cells, index) => {
     const score = cells.map(normalize).filter((cell) => knownHeaders.some((known) => cell === known || cell.includes(known))).length;
     return score > best.score ? { index, score } : best;
   }, { index: 0, score: -1 }).index;
   const headers = rows[headerIndex].map(normalize);
+  const available = new Set<string>();
+  if (hasHeader(headers, aliases.reach)) available.add("reach");
+  if (hasHeader(headers, aliases.impressions)) available.add("impressions");
+  if (hasHeader(headers, aliases.interactions)) available.add("interactions");
+  if (hasHeader(headers, aliases.followers)) available.add("followers");
+  const hasContentIdentity = hasHeader(headers, ["caption", "description", "postid", "mediaid", "contentid", "permalink", "judul", "keterangan"]);
+  const dataMode: "content" | "timeseries" = hasHeader(headers, aliases.date) && !hasContentIdentity ? "timeseries" : "content";
   const records = rows.slice(headerIndex + 1).map((cells) => Object.fromEntries(headers.map((header, index) => [header || `column${index}`, cells[index] || ""])));
   const media = records.map((row, index) => {
     const likes = numeric(valueFor(row, ["likes", "reactions", "like", "likesandreactions", "suka", "reaksi"]));
     const comments = numeric(valueFor(row, ["comments", "comment", "komentar"]));
     const saved = numeric(valueFor(row, ["saves", "saved", "disimpan", "simpanan"]));
     const shares = numeric(valueFor(row, ["shares", "share", "dibagikan", "bagikan"]));
-    const reach = numeric(valueFor(row, ["reach", "accountsreached", "postreach", "totalreach", "jangkauan", "akunyangdijangkau"]));
-    const impressions = numeric(valueFor(row, ["impressions", "impression", "postimpressions", "totalimpressions", "tayangan"]));
+    const reach = numeric(valueFor(row, aliases.reach));
+    const impressions = numeric(valueFor(row, aliases.impressions));
     const views = numeric(valueFor(row, ["views", "contentviews", "plays", "videoplays", "videoviews", "tontonan", "pemutaran"]));
-    const listedInteractions = numeric(valueFor(row, ["interactions", "totalinteractions", "contentinteractions", "postengagement", "engagement", "engagements", "interaksi", "interaksikonten", "reactionscommentsshares"]));
+    const listedInteractions = numeric(valueFor(row, aliases.interactions));
     const interactions = listedInteractions || likes + comments + saved + shares;
-    const caption = valueFor(row, ["caption", "title", "post", "content", "description", "judul", "keterangan"]) || "Konten Meta Business Suite";
-    const mediaType = valueFor(row, ["mediatype", "posttype", "contenttype", "type", "format", "jeniskonten"]).toUpperCase() || "UNKNOWN";
+    const followers = numeric(valueFor(row, aliases.followers));
+    const timestamp = valueFor(row, aliases.date) || null;
+    const caption = valueFor(row, ["caption", "title", "post", "content", "description", "judul", "keterangan"]) || (dataMode === "timeseries" && timestamp ? `Data ${timestamp}` : "Konten Meta Business Suite");
+    const mediaType = valueFor(row, ["mediatype", "posttype", "contenttype", "type", "format", "jeniskonten"]).toUpperCase() || (dataMode === "timeseries" ? "TIMESERIES" : "UNKNOWN");
     const productType = valueFor(row, ["mediaproducttype", "producttype"]);
     return {
       id: valueFor(row, ["id", "postid", "mediaid", "contentid"]) || `${fileName}-${index + 1}`,
@@ -121,26 +154,105 @@ export function importMetaBusinessSuiteCsv(fileName: string, text: string): Anal
       media_type: mediaType,
       media_product_type: productType ? productType.toUpperCase() : null,
       permalink: valueFor(row, ["permalink", "link", "url"]) || null,
-      timestamp: valueFor(row, ["timestamp", "published", "date", "createdtime"]) || null,
-      likes, comments, saved, shares, reach, impressions, views, interactions,
+      timestamp,
+      likes, comments, saved, shares, reach, impressions, followers, views, interactions,
       engagement_rate: reach > 0 ? (interactions / reach) * 100 : 0,
     } satisfies AnalyticsMedia;
-  }).filter((item) => item.reach || item.impressions || item.views || item.interactions || item.caption !== "Konten Meta Business Suite");
+  }).filter((item) => item.reach || item.impressions || item.followers || item.views || item.interactions || item.caption !== "Konten Meta Business Suite");
 
   if (!media.length) throw new Error("Kolom metrik tidak ditemukan. Gunakan CSV ekspor Content atau Insights dari Meta Business Suite.");
   const summary = media.reduce((total, item) => ({
     reach: total.reach + item.reach, impressions: total.impressions + (item.impressions || 0), views: total.views + item.views, interactions: total.interactions + item.interactions,
     likes: total.likes + item.likes, comments: total.comments + item.comments, saved: total.saved + item.saved, shares: total.shares + item.shares,
   }), { reach: 0, impressions: 0, views: 0, interactions: 0, likes: 0, comments: 0, saved: 0, shares: 0 });
-  const followers = Math.max(...records.map((row) => numeric(valueFor(row, ["followers", "followerscount", "totalfollowers", "lifetimefollowers", "pengikut", "totalpengikut"]))), 0);
+  const followerValues = records.map((row) => numeric(valueFor(row, aliases.followers)));
+  const followers = dataMode === "content" ? Math.max(...followerValues, 0) : 0;
+  const followersGained = dataMode === "timeseries" && available.has("followers") ? followerValues.reduce((sum, value) => sum + value, 0) : undefined;
   const username = valueFor(records[0], ["username", "accountusername", "account", "instagramaccount", "namaakun"]);
   const name = valueFor(records[0], ["accountname", "profilename", "pagename", "namaprofil"]);
-  const warnings: string[] = [];
-  if (!headers.some((header) => ["reach", "accountsreached", "postreach", "totalreach", "jangkauan", "akunyangdijangkau"].some((name) => header.includes(name)))) warnings.push("Kolom Reach/Jangkauan tidak ditemukan pada CSV ini.");
-  if (!headers.some((header) => ["interactions", "totalinteractions", "contentinteractions", "postengagement", "engagement", "interaksi"].some((name) => header.includes(name)))) warnings.push("Kolom Engagement/Interactions tidak ditemukan; total dihitung dari likes, comments, saves, dan shares yang tersedia.");
-  if (!headers.some((header) => ["impressions", "impression", "tayangan"].some((name) => header.includes(name)))) warnings.push("Kolom Impressions/Tayangan tidak ditemukan pada CSV ini.");
-  if (!headers.some((header) => ["followers", "followerscount", "totalfollowers", "pengikut"].some((name) => header.includes(name)))) warnings.push("Kolom Followers/Pengikut tidak tersedia pada CSV ini, sehingga nilainya tidak dapat dihitung dari data konten.");
-  return { source: `CSV Meta Business Suite · ${fileName}`, synced_at: new Date().toISOString(), warnings, account: { username, name, followers_count: followers, media_count: media.length }, summary, media };
+  return {
+    source: `CSV Meta Business Suite · ${fileName}`,
+    synced_at: new Date().toISOString(),
+    warnings: warningsFor(available),
+    available_metrics: [...available],
+    data_mode: dataMode,
+    account: { username, name, followers_count: followers, followers_gained: followersGained, media_count: media.length },
+    summary,
+    media,
+  };
+}
+
+export function importMetaBusinessSuiteCsvFiles(files: Array<{ fileName: string; text: string }>): AnalyticsPayload {
+  if (!files.length) throw new Error("Pilih minimal satu file CSV.");
+  const payloads = files.map((file) => importMetaBusinessSuiteCsv(file.fileName, file.text));
+  if (payloads.length === 1) return payloads[0];
+
+  const dataMode: "content" | "timeseries" = payloads.every((payload) => payload.data_mode === "timeseries") ? "timeseries" : "content";
+  const available = new Set(payloads.flatMap((payload) => payload.available_metrics || []));
+  const merged = new Map<string, AnalyticsMedia>();
+
+  for (const payload of payloads) {
+    for (const item of payload.media) {
+      const key = dataMode === "timeseries" && item.timestamp
+        ? `date:${normalize(item.timestamp)}`
+        : `content:${item.permalink || item.id}`;
+      const current = merged.get(key);
+      if (!current) {
+        merged.set(key, { ...item, id: key });
+        continue;
+      }
+      const reach = Math.max(current.reach, item.reach);
+      const interactions = Math.max(current.interactions, item.interactions);
+      merged.set(key, {
+        ...current,
+        caption: current.caption.startsWith("Konten Meta") ? item.caption : current.caption,
+        timestamp: current.timestamp || item.timestamp,
+        likes: Math.max(current.likes, item.likes),
+        comments: Math.max(current.comments, item.comments),
+        saved: Math.max(current.saved, item.saved),
+        shares: Math.max(current.shares, item.shares),
+        reach,
+        impressions: Math.max(current.impressions || 0, item.impressions || 0),
+        followers: Math.max(current.followers || 0, item.followers || 0),
+        views: Math.max(current.views, item.views),
+        interactions,
+        engagement_rate: reach > 0 ? (interactions / reach) * 100 : 0,
+      });
+    }
+  }
+
+  const media = [...merged.values()].sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")));
+  const summary = media.reduce((total, item) => ({
+    reach: total.reach + item.reach,
+    impressions: total.impressions + (item.impressions || 0),
+    views: total.views + item.views,
+    interactions: total.interactions + item.interactions,
+    likes: total.likes + item.likes,
+    comments: total.comments + item.comments,
+    saved: total.saved + item.saved,
+    shares: total.shares + item.shares,
+  }), { reach: 0, impressions: 0, views: 0, interactions: 0, likes: 0, comments: 0, saved: 0, shares: 0 });
+  const firstAccount = payloads.find((payload) => payload.account.username || payload.account.name)?.account;
+  const followersGained = dataMode === "timeseries" && available.has("followers")
+    ? media.reduce((sum, item) => sum + (item.followers || 0), 0)
+    : undefined;
+
+  return {
+    source: `CSV Meta Business Suite · ${files.length} file digabung`,
+    synced_at: new Date().toISOString(),
+    warnings: warningsFor(available),
+    available_metrics: [...available],
+    data_mode: dataMode,
+    account: {
+      username: firstAccount?.username,
+      name: firstAccount?.name,
+      followers_count: Math.max(...payloads.map((payload) => payload.account.followers_count || 0), 0),
+      followers_gained: followersGained,
+      media_count: media.length,
+    },
+    summary,
+    media,
+  };
 }
 
 export function getImportedAnalytics() {
