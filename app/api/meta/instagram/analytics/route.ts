@@ -83,7 +83,11 @@ type MetaConnection = MetaAccount & { token: string };
 
 type BrandMetaConfig = { accountId: string; brandName: string };
 
-function centralMetaTokens() {
+function normalizedTokenLabel(value: string) {
+  return value.toUpperCase().replace(/^META_ACCESS_TOKEN_?/, "").replace(/[^A-Z0-9]/g, "");
+}
+
+function centralMetaTokens(preferredBrandName = "") {
   const tokens = [process.env.META_ACCESS_TOKEN || ""];
   const pooled = process.env.META_ACCESS_TOKENS || "";
   if (pooled) {
@@ -95,9 +99,13 @@ function centralMetaTokens() {
       tokens.push(...pooled.split(/[\n,]+/));
     }
   }
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.toUpperCase().startsWith("META_ACCESS_TOKEN_") && value) tokens.push(value);
-  }
+  const brandLabel = normalizedTokenLabel(preferredBrandName);
+  const namedTokens = Object.entries(process.env).filter(([key, value]) => key.toUpperCase().startsWith("META_ACCESS_TOKEN_") && Boolean(value));
+  const regularTokens = namedTokens.filter(([key]) => normalizedTokenLabel(key) !== brandLabel);
+  const preferredTokens = namedTokens.filter(([key]) => normalizedTokenLabel(key) === brandLabel);
+  // Brand-specific tokens are appended last because account discovery keeps the
+  // last credential when several tokens expose the same Instagram account.
+  tokens.push(...regularTokens.map(([, value]) => value || ""), ...preferredTokens.map(([, value]) => value || ""));
   return [...new Set(tokens.map((token) => token.trim()).filter(Boolean))];
 }
 
@@ -251,14 +259,14 @@ export async function GET(request: Request) {
   const actor = await validateWorkspaceSession(request);
   if (!actor?.id) return NextResponse.json({ error: "Session login tidak valid." }, { status: 401, headers: noStoreHeaders });
   try {
-    const tokens = centralMetaTokens();
-    if (!tokens.length) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
     const url = new URL(request.url);
     const brandId = url.searchParams.get("brandId")?.trim() || "";
     if (!brandId) return NextResponse.json({ error: "Brand aktif belum tersedia." }, { status: 400, headers: noStoreHeaders });
     if (!(await canAccessBrand(String(actor.id), brandId))) return NextResponse.json({ error: "Akun ini tidak memiliki akses ke brand tersebut." }, { status: 403, headers: noStoreHeaders });
-    const connections = await discoverAllInstagramAccounts(tokens);
     const config = await brandMetaConfig(brandId);
+    const tokens = centralMetaTokens(config.brandName);
+    if (!tokens.length) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
+    const connections = await discoverAllInstagramAccounts(tokens);
     const configured = config.accountId ? connections.find((account) => account.id === config.accountId) : undefined;
     const automatic = automaticallyMatchedAccount(config.brandName, connections);
     const connection = configured || automatic || (connections.length === 1 ? connections[0] : undefined);
@@ -282,11 +290,11 @@ export async function POST(request: Request) {
     if (!(await hasWorkspacePermission(request, "brand.edit"))) return NextResponse.json({ error: "Hanya administrator brand yang dapat mengubah koneksi Meta." }, { status: 403, headers: noStoreHeaders });
     const brandId = typeof body?.brandId === "string" ? body.brandId.trim() : "";
     if (!brandId || !(await canAccessBrand(String(actor.id), brandId))) return NextResponse.json({ error: "Brand tidak valid atau tidak dapat diakses." }, { status: 403, headers: noStoreHeaders });
-    const tokens = centralMetaTokens();
+    const config = await brandMetaConfig(brandId);
+    const tokens = centralMetaTokens(config.brandName);
     if (!tokens.length) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
     const connections = await discoverAllInstagramAccounts(tokens);
     if (body?.action === "accounts") {
-      const config = await brandMetaConfig(brandId);
       const accounts: MetaAccount[] = connections.map(({ id, username, name, pageName }) => ({ id, username, name, pageName }));
       return NextResponse.json({ accounts, selectedAccountId: config.accountId }, { headers: noStoreHeaders });
     }
