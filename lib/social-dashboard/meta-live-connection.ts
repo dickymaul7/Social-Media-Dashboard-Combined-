@@ -1,17 +1,33 @@
-const tokensByBrand = new Map<string, string>();
+export type LiveMetaAccount = {
+  id: string;
+  username: string;
+  name: string;
+  pageName: string;
+};
 
-export function getLiveMetaToken(brandId: string) {
-  return tokensByBrand.get(brandId) || "";
+export type LiveMetaConnection = {
+  token: string;
+  igUserId: string;
+  username?: string;
+  name?: string;
+  pageName?: string;
+  accounts?: LiveMetaAccount[];
+};
+
+const connectionsByBrand = new Map<string, LiveMetaConnection>();
+
+export function getLiveMetaConnection(brandId: string) {
+  return connectionsByBrand.get(brandId) || null;
 }
 
-export function setLiveMetaToken(brandId: string, token: string, notify = true) {
-  const value = token.trim();
-  if (value) tokensByBrand.set(brandId, value);
-  else tokensByBrand.delete(brandId);
+export function setLiveMetaConnection(brandId: string, connection: LiveMetaConnection, notify = true) {
+  const token = connection.token.trim();
+  if (token && connection.igUserId) connectionsByBrand.set(brandId, { ...connection, token });
+  else connectionsByBrand.delete(brandId);
   if (notify && typeof window !== "undefined") window.dispatchEvent(new Event("meta-live-connection-changed"));
 }
 
-export function clearLiveMetaToken(brandId: string) {
-  tokensByBrand.delete(brandId);
+export function clearLiveMetaConnection(brandId: string) {
+  connectionsByBrand.delete(brandId);
   if (typeof window !== "undefined") window.dispatchEvent(new Event("meta-live-connection-changed"));
 }
