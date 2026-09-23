@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnalyticsPayload, getImportedAnalytics } from "@/lib/social-dashboard/csv-import";
-import { getLiveMetaToken } from "@/lib/social-dashboard/meta-live-connection";
+import { getLiveMetaConnection } from "@/lib/social-dashboard/meta-live-connection";
 import { readSession } from "@/lib/access-control";
 import { useActiveBrand } from "@/components/active-brand";
 
@@ -17,15 +17,15 @@ export function useMetaAnalytics() {
     try {
       setLoading(true); setError("");
       const session = readSession();
-      const liveToken = getLiveMetaToken(activeBrand.id);
+      const liveConnection = getLiveMetaConnection(activeBrand.id);
       const response = await fetch("/api/meta/instagram/analytics", {
-        method: liveToken ? "POST" : "GET",
+        method: liveConnection ? "POST" : "GET",
         cache: "no-store",
         headers: {
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          ...(liveToken ? { "Content-Type": "application/json" } : {}),
+          ...(liveConnection ? { "Content-Type": "application/json" } : {}),
         },
-        body: liveToken ? JSON.stringify({ accessToken: liveToken }) : undefined,
+        body: liveConnection ? JSON.stringify({ accessToken: liveConnection.token, igUserId: liveConnection.igUserId }) : undefined,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Gagal memuat Meta analytics.");
