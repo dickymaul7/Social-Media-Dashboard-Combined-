@@ -161,7 +161,7 @@ async function metricValues(mediaId: string, token: string) {
 
 async function loadAnalytics(token: string, igUserId: string, source: string) {
   const account = await metaGet(`/${igUserId}?fields=id,username,name,profile_picture_url,followers_count,media_count`, token);
-  const mediaPayload = await metaGet(`/${igUserId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=25`, token);
+  const mediaPayload = await metaGet(`/${igUserId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=100`, token);
   let failedInsightItems = 0;
   const media = await Promise.all((Array.isArray(mediaPayload?.data) ? mediaPayload.data : []).map(async (item: any) => {
     let insights: Record<string, number> = {};

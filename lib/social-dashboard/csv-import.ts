@@ -4,6 +4,8 @@ export type AnalyticsMedia = {
   media_type: string;
   media_product_type?: string | null;
   permalink?: string | null;
+  media_url?: string | null;
+  thumbnail_url?: string | null;
   timestamp?: string | null;
   likes: number;
   comments: number;
