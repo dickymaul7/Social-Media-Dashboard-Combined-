@@ -58,7 +58,7 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
     if (invalid) { setStatus(`${invalid.name} bukan file CSV.`); return; }
     try {
       const analytics = importMetaBusinessSuiteCsvFiles(await Promise.all(files.map(async (file) => ({ fileName: file.name, text: await readCsvText(file) }))));
-      saveImportedAnalytics(analytics);
+      saveImportedAnalytics(activeBrand.id, analytics);
       setStatus(`${files.length} file CSV selesai diproses menjadi ${analytics.media.length} baris data.`);
       onImported();
     } catch (error) {
@@ -78,7 +78,7 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Akun Instagram tidak dapat disimpan.");
-      clearImportedAnalytics();
+      clearImportedAnalytics(activeBrand.id);
       const account = payload?.account as LiveMetaAccount;
       setStatus(`${account?.username ? `@${account.username}` : account?.name || "Akun Instagram"} tersimpan untuk ${activeBrand.name}. Semua user akan memakai koneksi ini.`);
     } catch (error) {
@@ -90,7 +90,7 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
     <div className="csv-import-actions">
       <input ref={inputRef} type="file" accept=".csv,text/csv" multiple onChange={onFile} hidden />
       <button type="button" className="ghost" onClick={() => inputRef.current?.click()}>Upload CSV Files</button>
-      {hasImport && <button type="button" className="ghost" onClick={() => { clearImportedAnalytics(); setStatus("Data CSV dihapus."); onImported(); }}>Hapus data CSV</button>}
+      {hasImport && <button type="button" className="ghost" onClick={() => { clearImportedAnalytics(activeBrand.id); setStatus(`Data CSV ${activeBrand.name} dihapus.`); onImported(); }}>Hapus data CSV</button>}
     </div>
     <div className="meta-token-form">
       <div className="meta-connection-copy">

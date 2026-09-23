@@ -331,17 +331,23 @@ export function importMetaBusinessSuiteCsvFiles(files: Array<{ fileName: string;
   };
 }
 
-export function getImportedAnalytics() {
-  if (typeof window === "undefined") return null;
-  try { return JSON.parse(window.localStorage.getItem(storageKey) || "null") as AnalyticsPayload | null; } catch { return null; }
+function brandStorageKey(brandId: string) {
+  return `${storageKey}:${brandId}`;
 }
 
-export function saveImportedAnalytics(data: AnalyticsPayload) {
-  window.localStorage.setItem(storageKey, JSON.stringify(data));
+export function getImportedAnalytics(brandId: string) {
+  if (typeof window === "undefined") return null;
+  try { return JSON.parse(window.localStorage.getItem(brandStorageKey(brandId)) || "null") as AnalyticsPayload | null; } catch { return null; }
+}
+
+export function saveImportedAnalytics(brandId: string, data: AnalyticsPayload) {
+  window.localStorage.setItem(brandStorageKey(brandId), JSON.stringify(data));
+  // The former unscoped value could show one brand's CSV on every dashboard.
+  window.localStorage.removeItem(storageKey);
   window.dispatchEvent(new Event("meta-csv-imported"));
 }
 
-export function clearImportedAnalytics() {
-  window.localStorage.removeItem(storageKey);
+export function clearImportedAnalytics(brandId: string) {
+  window.localStorage.removeItem(brandStorageKey(brandId));
   window.dispatchEvent(new Event("meta-csv-imported"));
 }

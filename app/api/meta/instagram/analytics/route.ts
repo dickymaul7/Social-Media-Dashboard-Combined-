@@ -83,6 +83,22 @@ type MetaConnection = MetaAccount & { token: string };
 
 type BrandMetaConfig = { accountId: string; brandName: string };
 
+function centralMetaTokens() {
+  const tokens = [process.env.META_ACCESS_TOKEN || ""];
+  const pooled = process.env.META_ACCESS_TOKENS || "";
+  if (pooled) {
+    try {
+      const parsed = JSON.parse(pooled);
+      if (Array.isArray(parsed)) tokens.push(...parsed.map(String));
+      else tokens.push(pooled);
+    } catch {
+      tokens.push(...pooled.split(/[\n,]+/));
+    }
+  }
+  for (let index = 1; index <= 20; index += 1) tokens.push(process.env[`META_ACCESS_TOKEN_${index}`] || "");
+  return [...new Set(tokens.map((token) => token.trim()).filter(Boolean))];
+}
+
 function environmentAccountId(brandId: string) {
   try {
     const value = JSON.parse(process.env.META_BRAND_ACCOUNT_MAP || "{}") as Record<string, string>;
@@ -146,6 +162,45 @@ async function discoverInstagramAccounts(inputToken: string): Promise<MetaConnec
   return connected;
 }
 
+async function discoverAllInstagramAccounts(tokens: string[]) {
+  const results = await Promise.allSettled(tokens.map(discoverInstagramAccounts));
+  const connections = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const unique = Array.from(new Map<string, MetaConnection>(connections.map((account) => [account.id, account])).values());
+  if (unique.length) return unique;
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  throw failure?.reason instanceof Error ? failure.reason : new Error("Token pusat tidak menemukan akun Instagram Business/Creator.");
+}
+
+const ignoredBrandWords = new Set(["pt", "cv", "indonesia", "official", "id", "group", "company", "the"]);
+
+function normalizedWords(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+}
+
+function accountMatchScore(brandName: string, account: MetaConnection) {
+  const brandWords = normalizedWords(brandName);
+  const meaningfulBrandWords = brandWords.filter((word) => !ignoredBrandWords.has(word));
+  const brandCompact = brandWords.join("");
+  const brandCore = meaningfulBrandWords.join("") || brandCompact;
+  return Math.max(...[account.username, account.name, account.pageName].map((label) => {
+    const candidateWords = normalizedWords(label);
+    const candidateCompact = candidateWords.join("");
+    const candidateCore = candidateWords.filter((word) => !ignoredBrandWords.has(word)).join("") || candidateCompact;
+    if (!brandCompact || !candidateCompact) return 0;
+    if (candidateCompact === brandCompact) return 100;
+    if (brandCore.length >= 3 && candidateCore === brandCore) return 95;
+    if (Math.min(brandCore.length, candidateCore.length) >= 4 && (candidateCore.startsWith(brandCore) || brandCore.startsWith(candidateCore))) return 85;
+    if (meaningfulBrandWords.length && meaningfulBrandWords.every((word) => candidateCompact.includes(word))) return 75;
+    return 0;
+  }));
+}
+
+function automaticallyMatchedAccount(brandName: string, connections: MetaConnection[]) {
+  const ranked = connections.map((account) => ({ account, score: accountMatchScore(brandName, account) })).sort((a, b) => b.score - a.score);
+  if (!ranked[0] || ranked[0].score < 75 || ranked[0].score === ranked[1]?.score) return undefined;
+  return ranked[0].account;
+}
+
 const mediaMetrics = ["reach", "saved", "shares", "views", "total_interactions"] as const;
 
 async function metricValues(mediaId: string, token: string) {
@@ -194,18 +249,22 @@ export async function GET(request: Request) {
   const actor = await validateWorkspaceSession(request);
   if (!actor?.id) return NextResponse.json({ error: "Session login tidak valid." }, { status: 401, headers: noStoreHeaders });
   try {
-    const token = process.env.META_ACCESS_TOKEN || "";
-    if (!token) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
+    const tokens = centralMetaTokens();
+    if (!tokens.length) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
     const url = new URL(request.url);
     const brandId = url.searchParams.get("brandId")?.trim() || "";
     if (!brandId) return NextResponse.json({ error: "Brand aktif belum tersedia." }, { status: 400, headers: noStoreHeaders });
     if (!(await canAccessBrand(String(actor.id), brandId))) return NextResponse.json({ error: "Akun ini tidak memiliki akses ke brand tersebut." }, { status: 403, headers: noStoreHeaders });
-    const connections = await discoverInstagramAccounts(token);
+    const connections = await discoverAllInstagramAccounts(tokens);
     const config = await brandMetaConfig(brandId);
-    const normalizedBrand = config.brandName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const automatic = connections.find((account) => [account.username, account.name, account.pageName].some((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedBrand));
-    const connection = config.accountId ? connections.find((account) => account.id === config.accountId) : automatic || (connections.length === 1 ? connections[0] : undefined);
-    if (!connection) return NextResponse.json({ error: `${config.brandName} belum dipetakan ke akun Instagram. Administrator perlu memilih akun satu kali pada panel Meta Insights.` }, { status: 409, headers: noStoreHeaders });
+    const configured = config.accountId ? connections.find((account) => account.id === config.accountId) : undefined;
+    const automatic = automaticallyMatchedAccount(config.brandName, connections);
+    const connection = configured || automatic || (connections.length === 1 ? connections[0] : undefined);
+    if (!connection) return NextResponse.json({ error: `Belum ditemukan akun Instagram yang cocok untuk ${config.brandName} dari token pusat. Administrator dapat memilih akun pada panel Meta Insights atau menambahkan token brand tersebut.` }, { status: 409, headers: noStoreHeaders });
+    if (!configured && automatic) {
+      const account: MetaAccount = { id: automatic.id, username: automatic.username, name: automatic.name, pageName: automatic.pageName };
+      await saveBrandMetaAccount(brandId, account).catch(() => undefined);
+    }
     const accountLabel = connection.username ? `@${connection.username}` : connection.name;
     return NextResponse.json(await loadAnalytics(connection.token, connection.id, `Meta Graph API · ${accountLabel}`), { headers: noStoreHeaders });
   } catch (err) {
@@ -221,9 +280,9 @@ export async function POST(request: Request) {
     if (!(await hasWorkspacePermission(request, "brand.edit"))) return NextResponse.json({ error: "Hanya administrator brand yang dapat mengubah koneksi Meta." }, { status: 403, headers: noStoreHeaders });
     const brandId = typeof body?.brandId === "string" ? body.brandId.trim() : "";
     if (!brandId || !(await canAccessBrand(String(actor.id), brandId))) return NextResponse.json({ error: "Brand tidak valid atau tidak dapat diakses." }, { status: 403, headers: noStoreHeaders });
-    const token = process.env.META_ACCESS_TOKEN || "";
-    if (!token) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
-    const connections = await discoverInstagramAccounts(token);
+    const tokens = centralMetaTokens();
+    if (!tokens.length) return NextResponse.json({ error: "Token Meta pusat belum dikonfigurasi oleh administrator." }, { status: 503, headers: noStoreHeaders });
+    const connections = await discoverAllInstagramAccounts(tokens);
     if (body?.action === "accounts") {
       const config = await brandMetaConfig(brandId);
       const accounts: MetaAccount[] = connections.map(({ id, username, name, pageName }) => ({ id, username, name, pageName }));
