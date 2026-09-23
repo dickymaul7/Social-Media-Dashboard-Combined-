@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnalyticsPayload, getImportedAnalytics } from "@/lib/social-dashboard/csv-import";
+import { getLiveMetaToken } from "@/lib/social-dashboard/meta-live-connection";
 import { readSession } from "@/lib/access-control";
+import { useActiveBrand } from "@/components/active-brand";
 
 export function useMetaAnalytics() {
+  const { activeBrand } = useActiveBrand();
   const [data, setData] = useState<AnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -14,9 +17,15 @@ export function useMetaAnalytics() {
     try {
       setLoading(true); setError("");
       const session = readSession();
+      const liveToken = getLiveMetaToken(activeBrand.id);
       const response = await fetch("/api/meta/instagram/analytics", {
+        method: liveToken ? "POST" : "GET",
         cache: "no-store",
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+        headers: {
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          ...(liveToken ? { "Content-Type": "application/json" } : {}),
+        },
+        body: liveToken ? JSON.stringify({ accessToken: liveToken }) : undefined,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Gagal memuat Meta analytics.");
@@ -25,11 +34,15 @@ export function useMetaAnalytics() {
       setData(null);
       setError(err instanceof Error ? err.message : "Gagal memuat Meta analytics.");
     } finally { setLoading(false); }
-  }, []);
+  }, [activeBrand.id]);
   useEffect(() => {
     void refresh();
     window.addEventListener("meta-csv-imported", refresh);
-    return () => window.removeEventListener("meta-csv-imported", refresh);
+    window.addEventListener("meta-live-connection-changed", refresh);
+    return () => {
+      window.removeEventListener("meta-csv-imported", refresh);
+      window.removeEventListener("meta-live-connection-changed", refresh);
+    };
   }, [refresh]);
   return { data, loading, error, refresh, hasImportedCsv: Boolean(getImportedAnalytics()) };
 }
