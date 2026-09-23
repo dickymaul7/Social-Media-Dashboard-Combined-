@@ -95,7 +95,9 @@ function centralMetaTokens() {
       tokens.push(...pooled.split(/[\n,]+/));
     }
   }
-  for (let index = 1; index <= 20; index += 1) tokens.push(process.env[`META_ACCESS_TOKEN_${index}`] || "");
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.toUpperCase().startsWith("META_ACCESS_TOKEN_") && value) tokens.push(value);
+  }
   return [...new Set(tokens.map((token) => token.trim()).filter(Boolean))];
 }
 
