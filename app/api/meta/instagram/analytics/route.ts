@@ -32,21 +32,36 @@ async function metaGet(path: string, token: string) {
   return payload;
 }
 
-type MetaConnection = { igUserId: string; token: string };
+type MetaAccount = {
+  id: string;
+  username: string;
+  name: string;
+  pageName: string;
+};
 
-async function discoverInstagramAccount(inputToken: string): Promise<MetaConnection> {
+type MetaConnection = MetaAccount & { token: string };
+
+async function discoverInstagramAccounts(inputToken: string): Promise<MetaConnection[]> {
   try {
     const page = await metaGet("/me?fields=id,name,instagram_business_account{id,username,name}", inputToken);
-    if (page?.instagram_business_account?.id) return { igUserId: String(page.instagram_business_account.id), token: inputToken };
+    const instagram = page?.instagram_business_account;
+    if (instagram?.id) return [{ id: String(instagram.id), username: String(instagram.username || ""), name: String(instagram.name || instagram.username || "Akun Instagram"), pageName: String(page.name || "Facebook Page"), token: inputToken }];
   } catch {
     // User access tokens do not always expose Page-only fields on /me.
   }
   const pages = await metaGet("/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&limit=100", inputToken);
-  const connected = (Array.isArray(pages?.data) ? pages.data : []).filter((page: any) => page?.instagram_business_account?.id);
+  const found: MetaConnection[] = (Array.isArray(pages?.data) ? pages.data : [])
+    .filter((page: any) => page?.instagram_business_account?.id)
+    .map((page: any) => ({
+      id: String(page.instagram_business_account.id),
+      username: String(page.instagram_business_account.username || ""),
+      name: String(page.instagram_business_account.name || page.instagram_business_account.username || "Akun Instagram"),
+      pageName: String(page.name || "Facebook Page"),
+      token: String(page.access_token || inputToken),
+    }));
+  const connected = Array.from(new Map<string, MetaConnection>(found.map((account) => [account.id, account])).values());
   if (!connected.length) throw new Error("Token tidak menemukan akun Instagram Business/Creator yang terhubung ke Facebook Page.");
-  if (connected.length > 1) throw new Error("Token terhubung ke beberapa akun Instagram. Gunakan Page Access Token khusus untuk brand yang dipilih.");
-  const page = connected[0];
-  return { igUserId: String(page.instagram_business_account.id), token: String(page.access_token || inputToken) };
+  return connected;
 }
 
 const mediaMetrics = ["reach", "saved", "shares", "views", "total_interactions"] as const;
@@ -112,8 +127,17 @@ export async function POST(request: Request) {
     const inputToken = typeof body?.accessToken === "string" ? body.accessToken.trim() : "";
     if (!inputToken) return NextResponse.json({ error: "Meta Graph API token wajib diisi." }, { status: 400, headers: noStoreHeaders });
     if (inputToken.length > 4096) return NextResponse.json({ error: "Token terlalu panjang." }, { status: 400, headers: noStoreHeaders });
-    const connection = await discoverInstagramAccount(inputToken);
-    return NextResponse.json(await loadAnalytics(connection.token, connection.igUserId, "Meta Graph API · token manual"), { headers: noStoreHeaders });
+    const connections = await discoverInstagramAccounts(inputToken);
+    if (body?.action === "accounts") {
+      const accounts: MetaAccount[] = connections.map(({ id, username, name, pageName }) => ({ id, username, name, pageName }));
+      return NextResponse.json({ accounts }, { headers: noStoreHeaders });
+    }
+    const requestedId = typeof body?.igUserId === "string" ? body.igUserId.trim() : "";
+    if (!requestedId && connections.length > 1) return NextResponse.json({ error: "Pilih akun Instagram yang ingin ditampilkan terlebih dahulu." }, { status: 409, headers: noStoreHeaders });
+    const connection = requestedId ? connections.find((account) => account.id === requestedId) : connections[0];
+    if (!connection) return NextResponse.json({ error: "Akun Instagram yang dipilih tidak tersedia untuk token ini." }, { status: 404, headers: noStoreHeaders });
+    const accountLabel = connection.username ? `@${connection.username}` : connection.name;
+    return NextResponse.json(await loadAnalytics(connection.token, connection.id, `Meta Graph API · ${accountLabel}`), { headers: noStoreHeaders });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Token Meta tidak dapat digunakan." }, { status: 502, headers: noStoreHeaders });
   }
