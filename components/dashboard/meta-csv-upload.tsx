@@ -1,10 +1,10 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import { clearImportedAnalytics, importMetaBusinessSuiteCsvFiles, saveImportedAnalytics } from "@/lib/social-dashboard/csv-import";
-import { clearLiveMetaConnection, getLiveMetaConnection, LiveMetaAccount, setLiveMetaConnection } from "@/lib/social-dashboard/meta-live-connection";
-import { readSession } from "@/lib/access-control";
+import { LiveMetaAccount } from "@/lib/social-dashboard/meta-live-connection";
+import { hasPermission, readSession } from "@/lib/access-control";
 import { useActiveBrand } from "@/components/active-brand";
 
 async function readCsvText(file: File) {
@@ -23,21 +23,33 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
   const { activeBrand } = useActiveBrand();
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
-  const [token, setToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
-  const [connecting, setConnecting] = useState(false);
   const [accounts, setAccounts] = useState<LiveMetaAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [pendingToken, setPendingToken] = useState("");
-  const liveConnection = getLiveMetaConnection(activeBrand.id);
+  const [canConfigure, setCanConfigure] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
   useEffect(() => {
-    const connection = getLiveMetaConnection(activeBrand.id);
-    setToken("");
-    setPendingToken(connection?.token || "");
-    setAccounts(connection?.accounts || []);
-    setSelectedAccountId(connection?.igUserId || "");
-    setShowToken(false);
+    let cancelled = false;
+    setAccounts([]);
+    setSelectedAccountId("");
     setStatus("");
+    void hasPermission("brand.edit").then(async (allowed) => {
+      if (cancelled) return;
+      setCanConfigure(allowed);
+      if (!allowed) return;
+      const session = readSession();
+      const response = await fetch("/api/meta/instagram/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ action: "accounts", brandId: activeBrand.id }),
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (cancelled) return;
+      if (!response.ok) { setStatus(payload?.error || "Daftar akun Meta tidak dapat dimuat."); return; }
+      setAccounts(Array.isArray(payload?.accounts) ? payload.accounts : []);
+      setSelectedAccountId(String(payload?.selectedAccountId || ""));
+    });
+    return () => { cancelled = true; };
   }, [activeBrand.id]);
   const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -53,46 +65,25 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
       setStatus(error instanceof Error ? error.message : "CSV tidak dapat diproses.");
     } finally { event.target.value = ""; }
   };
-  const activateAccount = (account: LiveMetaAccount, accessToken: string, availableAccounts = accounts) => {
-    setLiveMetaConnection(activeBrand.id, { token: accessToken, igUserId: account.id, username: account.username, name: account.name, pageName: account.pageName, accounts: availableAccounts }, false);
-    clearImportedAnalytics();
-    setAccounts(availableAccounts);
-    setPendingToken(accessToken);
-    setSelectedAccountId(account.id);
-    const label = account.username ? `@${account.username}` : account.name;
-    setStatus(`${label} dipilih. Dashboard sedang memuat data live.`);
-  };
-  const connectLiveMeta = async (event: FormEvent) => {
-    event.preventDefault();
-    const value = token.trim();
-    if (!value) { setStatus("Masukkan Meta Graph API token terlebih dahulu."); return; }
-    if (value.length > 4096) { setStatus("Token terlalu panjang dan tidak dapat diproses."); return; }
-    setConnecting(true);
-    setStatus("Mencari akun Instagram yang tersedia untuk token ini…");
+  const assignAccount = async () => {
+    if (!selectedAccountId) return;
+    setConfiguring(true);
     try {
       const session = readSession();
       const response = await fetch("/api/meta/instagram/analytics", {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-        body: JSON.stringify({ accessToken: value, action: "accounts" }),
+        body: JSON.stringify({ action: "assign", brandId: activeBrand.id, igUserId: selectedAccountId }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || "Daftar akun Meta tidak dapat dimuat.");
-      const discovered = Array.isArray(payload?.accounts) ? payload.accounts as LiveMetaAccount[] : [];
-      if (!discovered.length) throw new Error("Tidak ada akun Instagram Business/Creator yang ditemukan.");
-      setToken("");
-      setShowToken(false);
-      if (discovered.length === 1) activateAccount(discovered[0], value, discovered);
-      else {
-        setPendingToken(value);
-        setAccounts(discovered);
-        setSelectedAccountId("");
-        setStatus(`${discovered.length} akun ditemukan. Pilih akun yang ingin ditampilkan.`);
-      }
+      if (!response.ok) throw new Error(payload?.error || "Akun Instagram tidak dapat disimpan.");
+      clearImportedAnalytics();
+      const account = payload?.account as LiveMetaAccount;
+      setStatus(`${account?.username ? `@${account.username}` : account?.name || "Akun Instagram"} tersimpan untuk ${activeBrand.name}. Semua user akan memakai koneksi ini.`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Token Meta tidak dapat digunakan.");
-    } finally { setConnecting(false); }
+      setStatus(error instanceof Error ? error.message : "Konfigurasi Meta tidak dapat disimpan.");
+    } finally { setConfiguring(false); }
   };
   return <div className="csv-import">
     <div><strong>Impor CSV Meta Business Suite</strong><span>Pilih satu atau beberapa CSV. File Tayangan, Jangkauan, Interaksi, Pengikut, Kunjungan, dan Klik Tautan akan digabung berdasarkan tanggal.</span></div>
@@ -101,27 +92,21 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
       <button type="button" className="ghost" onClick={() => inputRef.current?.click()}>Upload CSV Files</button>
       {hasImport && <button type="button" className="ghost" onClick={() => { clearImportedAnalytics(); setStatus("Data CSV dihapus."); onImported(); }}>Hapus data CSV</button>}
     </div>
-    <form className="meta-token-form" onSubmit={connectLiveMeta}>
-      <label htmlFor={`meta-token-${activeBrand.id}`}>
-        <span><ShieldCheck size={13}/> Meta Graph API Token · {activeBrand.name}</span>
-        <small>Satu token dapat menampilkan seluruh akun yang diberi akses. Token hanya dipakai selama tab ini terbuka.</small>
-      </label>
-      <div className="meta-token-input">
-        <input id={`meta-token-${activeBrand.id}`} type={showToken ? "text" : "password"} value={token} onChange={(event) => setToken(event.target.value)} placeholder={liveConnection ? `Terhubung ke ${liveConnection.username ? `@${liveConnection.username}` : liveConnection.name || "akun Instagram"}` : "Tempel access token Meta"} autoComplete="off" spellCheck={false}/>
-        <button type="button" aria-label={showToken ? "Sembunyikan token" : "Tampilkan token"} onClick={() => setShowToken((value) => !value)}>{showToken ? <EyeOff size={15}/> : <Eye size={15}/>}</button>
+    <div className="meta-token-form">
+      <div className="meta-connection-copy">
+        <span className="meta-central-label"><ShieldCheck size={13}/> Live Meta terpusat · {activeBrand.name}</span>
+        <small>Dashboard otomatis mengikuti brand aktif. User lain tidak perlu memasukkan access token.</small>
       </div>
-      <button type="submit" className="meta-connect-button" disabled={connecting || !token.trim()}>{connecting ? "Menghubungkan…" : "Hubungkan Live Meta"}</button>
-      {liveConnection && <button type="button" className="ghost" onClick={() => { clearLiveMetaConnection(activeBrand.id); setAccounts([]); setPendingToken(""); setSelectedAccountId(""); setStatus(`Koneksi live ${activeBrand.name} diputus.`); }}>Putuskan</button>}
-      {accounts.length > 1 && <div className="meta-account-picker">
+      {canConfigure && accounts.length > 0 && <div className="meta-account-picker">
         <label htmlFor={`meta-account-${activeBrand.id}`}><span>Akun Instagram yang ditampilkan</span>
           <select id={`meta-account-${activeBrand.id}`} value={selectedAccountId} onChange={(event) => setSelectedAccountId(event.target.value)}>
             <option value="">Pilih akun Instagram</option>
             {accounts.map((account) => <option key={account.id} value={account.id}>{account.username ? `@${account.username}` : account.name} · {account.pageName}</option>)}
           </select>
         </label>
-        <button type="button" className="meta-connect-button" disabled={!selectedAccountId || selectedAccountId === liveConnection?.igUserId} onClick={() => { const account = accounts.find((item) => item.id === selectedAccountId); if (account) activateAccount(account, pendingToken); }}>Tampilkan akun</button>
+        <button type="button" className="meta-connect-button" disabled={!selectedAccountId || configuring} onClick={() => void assignAccount()}>{configuring ? "Menyimpan…" : "Simpan untuk brand"}</button>
       </div>}
-    </form>
+    </div>
     {status && <small>{status}</small>}
   </div>;
 }
