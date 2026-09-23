@@ -8,6 +8,9 @@
 .meta-token-input button{display:grid;place-items:center;border:0;border-left:1px solid #eee7e9;background:#fff;color:#766b70;padding:9px;cursor:pointer}
 .meta-connect-button{border:1px solid #8d1730;border-radius:7px;padding:8px 11px;background:#8d1730;color:#fff;font-size:11px;font-weight:700;white-space:nowrap;cursor:pointer}
 .meta-connect-button:disabled{opacity:.5;cursor:not-allowed}
+.meta-connection-copy{grid-column:1/-1;display:grid;gap:4px}
+.meta-central-label{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:#30272a}
+.meta-connection-copy small{font-size:9px;line-height:1.45;color:#81767b}
 .meta-account-picker{grid-column:1/-1;display:grid;grid-template-columns:minmax(280px,1fr) auto;gap:10px;align-items:end;padding:12px;border:1px solid #eadfe2;border-radius:9px;background:#fbf8f9}
 .meta-account-picker label{display:grid;gap:6px}
 .meta-account-picker select{width:100%;border:1px solid #d9cdd2;border-radius:8px;background:#fff;padding:9px 32px 9px 10px;font-size:11px;color:#30272a;outline:0}
