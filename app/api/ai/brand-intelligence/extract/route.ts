@@ -9,14 +9,35 @@ const MAX_FILES = 5;
 const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
 const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "html", "htm", "xml"]);
 
+type PdfWorkerGlobal = typeof globalThis & {
+ pdfjsWorker?: { WorkerMessageHandler?: unknown };
+};
+
+let pdfJsPromise: Promise<typeof import("pdfjs-dist/legacy/build/pdf.js")> | undefined;
+
 function errorJson(message:string,status=400){return NextResponse.json({ok:false,error:message},{status})}
 function extension(name:string){const parts=name.toLowerCase().split(".");return parts.length>1?parts.pop()||"":""}
 function sameOrigin(request:Request){const origin=request.headers.get("origin");const host=request.headers.get("x-forwarded-host")||request.headers.get("host");if(!origin||!host)return true;try{return new URL(origin).host===host}catch{return false}}
 function normalizeArray(value:unknown){if(!Array.isArray(value))return[];return value.filter((x):x is string=>typeof x==="string").map(x=>x.trim()).filter(Boolean).slice(0,20)}
 function normalizeSources(value:unknown,fallbackNames:string[]){if(!Array.isArray(value))return fallbackNames.map(name=>({name,notes:"Dibaca sebagai sumber Brand Intelligence."}));const rows=value.filter(x=>x&&typeof x==="object"&&!Array.isArray(x)).map((x:any)=>({name:typeof x.name==="string"?x.name.trim():"",notes:typeof x.notes==="string"?x.notes.trim():""})).filter(x=>x.name);return rows.length?rows.slice(0,10):fallbackNames.map(name=>({name,notes:"Dibaca sebagai sumber Brand Intelligence."}))}
 
+function loadPdfJs(){
+ if(!pdfJsPromise){
+  pdfJsPromise=Promise.all([
+   import("pdfjs-dist/legacy/build/pdf.js"),
+   import("pdfjs-dist/legacy/build/pdf.worker.js"),
+  ]).then(([pdfjs,worker])=>{
+   // The server runtime has no Web Worker. Register the worker handler so
+   // pdfjs can use its supported in-process worker without a relative require.
+   (globalThis as PdfWorkerGlobal).pdfjsWorker=worker;
+   return pdfjs;
+  });
+ }
+ return pdfJsPromise;
+}
+
 async function extractPdfText(file:File){
- const pdfjs=await import("pdfjs-dist/legacy/build/pdf.js");
+ const pdfjs=await loadPdfJs();
  const data=new Uint8Array(await file.arrayBuffer());
  const document=await pdfjs.getDocument({data,useSystemFonts:true}).promise;
  const pages:string[]=[];
