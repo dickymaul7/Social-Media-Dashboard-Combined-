@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { localWorkspaceAllowed } from "@/lib/local-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ function getBearer(request: Request) {
 async function validateWorkspaceSession(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) return true;
+  if (!url || !anon) return localWorkspaceAllowed();
   const token = getBearer(request);
   if (!token) return false;
   try {

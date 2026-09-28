@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createStructuredJson } from "@/lib/ai/core";
+import { requireWorkspaceSession, unauthorizedJson } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ async function extractPdfText(file:File){
 
 export async function POST(request:Request){
  try{
-  if(!sameOrigin(request))return errorJson("Cross-origin extraction request ditolak.",403);
+  if(!sameOrigin(request))return errorJson("Cross-origin extraction request ditolak.",403);if(!await requireWorkspaceSession(request))return unauthorizedJson();
   if(!process.env.DEEPSEEK_API_KEY?.trim())return errorJson("DEEPSEEK_API_KEY belum dikonfigurasi di Vercel.",503);
   const formData=await request.formData();
   const files=formData.getAll("files").filter((item):item is File=>item instanceof File&&item.size>0);

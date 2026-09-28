@@ -4,6 +4,7 @@ import { angleSynthesisSchema, queryPlanSchema } from "@/lib/ai/schemas";
 import { normalizeSources, tavilySearch } from "@/lib/ai/tavily";
 import { buildIndonesiaNewsQueries, normalizeIndonesiaNews, tavilyNewsSearch } from "@/lib/ai/indonesia-news";
 import type { BrandIntelligence } from "@/lib/types";
+import { requireWorkspaceSession, unauthorizedJson } from "@/lib/api-auth";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ function angleCount(value:unknown){const parsed=Math.round(Number(value));return
 
 export async function POST(request:Request){
  try{
-  if(!sameOrigin(request))return errorJson("Cross-origin request ditolak.",403);
+  if(!sameOrigin(request))return errorJson("Cross-origin request ditolak.",403);if(!await requireWorkspaceSession(request))return unauthorizedJson();
   const body=(await request.json().catch(()=>({}))) as Partial<QuickBrief>;
   const requestedAngles=angleCount(body.storyAngleCount);
   const input:QuickBrief={brandId:String(body.brandId??"").trim(),brandName:String(body.brandName??"").trim(),website:String(body.website??"").trim(),topic:String(body.topic??"").trim(),audience:String(body.audience??"").trim(),objective:String(body.objective??"").trim(),cta:String(body.cta??"").trim(),preferredFormat:body.preferredFormat??"auto",extraContext:String(body.extraContext??"").trim(),brandIntelligence:body.brandIntelligence??null,storyAngleCount:requestedAngles};

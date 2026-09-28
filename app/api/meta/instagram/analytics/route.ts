@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { localWorkspaceAllowed } from "@/lib/local-mode";
 
 export const dynamic = "force-dynamic";
 
 const graphVersion = process.env.META_GRAPH_VERSION || "v25.0";
-const graphBase = `https://graph.facebook.com/${graphVersion}`;
+// META_GRAPH_BASE is a test/proxy escape hatch; production keeps the default host.
+const graphBase = process.env.META_GRAPH_BASE || `https://graph.facebook.com/${graphVersion}`;
 const noStoreHeaders = { "Cache-Control": "no-store, max-age=0" };
 
 function getBearer(request: Request) {
@@ -14,7 +16,7 @@ function getBearer(request: Request) {
 async function validateWorkspaceSession(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) return { id: "local" };
+  if (!url || !anon) return localWorkspaceAllowed() ? { id: "local" } : null;
   const token = getBearer(request);
   if (!token) return null;
   try {
@@ -40,7 +42,7 @@ function serviceHeaders() {
 
 async function hasWorkspacePermission(request: Request, permission: string) {
   const { url, anon } = supabaseConfig();
-  if (!url || !anon) return true;
+  if (!url || !anon) return localWorkspaceAllowed();
   const token = getBearer(request);
   if (!token) return false;
   try {
@@ -56,7 +58,8 @@ async function hasWorkspacePermission(request: Request, permission: string) {
 
 async function canAccessBrand(actorId: string, brandId: string) {
   const { url, service } = supabaseConfig();
-  if (!url || !service || actorId === "local") return true;
+  if (actorId === "local") return localWorkspaceAllowed();
+  if (!url || !service) return false;
   const roleResponse = await fetch(`${url}/rest/v1/user_roles?select=roles(key)&user_id=eq.${encodeURIComponent(actorId)}&limit=1`, { headers: serviceHeaders(), cache: "no-store" });
   const roleRows = await roleResponse.json().catch(() => []);
   if (roleRows?.[0]?.roles?.key === "super_admin") return true;
@@ -70,6 +73,21 @@ async function metaGet(path: string, token: string) {
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(payload?.error?.message || `Meta request failed (${res.status})`);
   return payload;
+}
+
+// Follows Graph API cursor pagination. Without this a token with more than one
+// page of results silently loses every account after the first 100.
+async function metaGetAll(path: string, token: string, maxPages = 10) {
+  const rows: any[] = [];
+  let next: string | null = `${graphBase}${path}`;
+  for (let page = 0; next && page < maxPages; page += 1) {
+    const res: Response = await fetch(next, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const payload: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload?.error?.message || `Meta request failed (${res.status})`);
+    if (Array.isArray(payload?.data)) rows.push(...payload.data);
+    next = typeof payload?.paging?.next === "string" ? payload.paging.next : null;
+  }
+  return rows;
 }
 
 type MetaAccount = {
@@ -150,24 +168,42 @@ async function saveBrandMetaAccount(brandId: string, account: MetaAccount) {
 }
 
 async function discoverInstagramAccounts(inputToken: string): Promise<MetaConnection[]> {
+  // Page-linked accounts first: each carries its own Page access token, which
+  // is what /{ig-user-id}/insights actually accepts. The user-token variant
+  // from /me is a fallback for accounts not exposed through /me/accounts.
+  const byId = new Map<string, MetaConnection>();
   try {
-    const page = await metaGet("/me?fields=id,name,instagram_business_account{id,username,name}", inputToken);
-    const instagram = page?.instagram_business_account;
-    if (instagram?.id) return [{ id: String(instagram.id), username: String(instagram.username || ""), name: String(instagram.name || instagram.username || "Akun Instagram"), pageName: String(page.name || "Facebook Page"), token: inputToken }];
+    const pages = await metaGetAll("/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&limit=100", inputToken);
+    for (const page of pages) {
+      const instagram = page?.instagram_business_account;
+      if (!instagram?.id) continue;
+      byId.set(String(instagram.id), {
+        id: String(instagram.id),
+        username: String(instagram.username || ""),
+        name: String(instagram.name || instagram.username || "Akun Instagram"),
+        pageName: String(page.name || "Facebook Page"),
+        token: String(page.access_token || inputToken),
+      });
+    }
+  } catch {
+    // Some tokens reject /me/accounts; /me below can still expose one account.
+  }
+  try {
+    const me = await metaGet("/me?fields=id,name,instagram_business_account{id,username,name}", inputToken);
+    const instagram = me?.instagram_business_account;
+    if (instagram?.id && !byId.has(String(instagram.id))) {
+      byId.set(String(instagram.id), {
+        id: String(instagram.id),
+        username: String(instagram.username || ""),
+        name: String(instagram.name || instagram.username || "Akun Instagram"),
+        pageName: String(me.name || "Facebook Page"),
+        token: inputToken,
+      });
+    }
   } catch {
     // User access tokens do not always expose Page-only fields on /me.
   }
-  const pages = await metaGet("/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name}&limit=100", inputToken);
-  const found: MetaConnection[] = (Array.isArray(pages?.data) ? pages.data : [])
-    .filter((page: any) => page?.instagram_business_account?.id)
-    .map((page: any) => ({
-      id: String(page.instagram_business_account.id),
-      username: String(page.instagram_business_account.username || ""),
-      name: String(page.instagram_business_account.name || page.instagram_business_account.username || "Akun Instagram"),
-      pageName: String(page.name || "Facebook Page"),
-      token: String(page.access_token || inputToken),
-    }));
-  const connected = Array.from(new Map<string, MetaConnection>(found.map((account) => [account.id, account])).values());
+  const connected = Array.from(byId.values());
   if (!connected.length) throw new Error("Token tidak menemukan akun Instagram Business/Creator yang terhubung ke Facebook Page.");
   return connected;
 }

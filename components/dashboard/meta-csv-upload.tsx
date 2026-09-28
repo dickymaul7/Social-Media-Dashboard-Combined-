@@ -105,7 +105,9 @@ export function MetaCsvUpload({ onImported, hasImport }: { onImported: () => voi
           </select>
         </label>
         <button type="button" className="meta-connect-button" disabled={!selectedAccountId || configuring} onClick={() => void assignAccount()}>{configuring ? "Menyimpan…" : "Simpan untuk brand"}</button>
+        <small>{accounts.length} akun Instagram terbaca dari token pusat.</small>
       </div>}
+      {canConfigure && accounts.length === 0 && <small>Token pusat belum mengembalikan akun Instagram. Periksa apakah token masih valid dan punya izin instagram_basic + pages_show_list.</small>}
     </div>
     {status && <small>{status}</small>}
   </div>;

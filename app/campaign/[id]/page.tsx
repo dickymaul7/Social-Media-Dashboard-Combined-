@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, FileText, Sparkles } from "lucide-react";
 import { loadCampaign, saveBrief, type CampaignBundle, type BriefRecord } from "@/lib/smm-workflow";
+import { authHeaders } from "@/lib/auth-headers";
 import "./page.css";
 
 export default function CampaignPage(){
@@ -14,7 +15,7 @@ export default function CampaignPage(){
   const [generatingId,setGeneratingId]=useState("");
   useEffect(()=>{const data=loadCampaign(id);setBundle(data);if(!data)setError("Campaign tidak ditemukan di browser storage. Generate ulang dari Quick Brief.")},[id]);
 
-  async function generate(ideaId:string){if(!bundle)return;setGeneratingId(ideaId);setError("");try{const response=await fetch("/api/ai/brief",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ideaId,bundle})});const payload=await response.json().catch(()=>({}));if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Gagal generate Full Brief.");saveBrief(payload.brief as BriefRecord);router.push(`/brief/${payload.brief.id}`)}catch(err){setError(err instanceof Error?err.message:"Gagal generate Full Brief.")}finally{setGeneratingId("")}}
+  async function generate(ideaId:string){if(!bundle)return;setGeneratingId(ideaId);setError("");try{const response=await fetch("/api/ai/brief",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({ideaId,bundle})});const payload=await response.json().catch(()=>({}));if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Gagal generate Full Brief.");saveBrief(payload.brief as BriefRecord);router.push(`/brief/${payload.brief.id}`)}catch(err){setError(err instanceof Error?err.message:"Gagal generate Full Brief.")}finally{setGeneratingId("")}}
 
   if(!bundle)return <main className="campaign-page"><a href="/content-generator" className="campaign-back"><ArrowLeft size={15}/> Quick Brief</a><div className="campaign-empty">{error||"Loading campaign..."}</div></main>;
   const {campaign,ideas,cases}=bundle;
