@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { authHeaders } from "@/lib/auth-headers";
 import {
   ArrowLeft,
   ArrowUp,
@@ -382,7 +383,7 @@ export default function BriefPage() {
     try {
       const response = await fetch("/api/ai/improve", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           brief,
           campaignBundle,
