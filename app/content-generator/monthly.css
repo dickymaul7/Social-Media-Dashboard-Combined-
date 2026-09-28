@@ -1,0 +1,15 @@
+.generator-mode{display:grid;grid-template-columns:repeat(2,minmax(0,240px));gap:10px;margin:0 0 18px}
+.generator-mode button{display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e4dde0;background:#fff;color:#665b60;border-radius:12px;padding:12px 14px;cursor:pointer}
+.generator-mode button.active{border-color:#9f1937;background:#faf1f3;color:#8d1730;box-shadow:0 0 0 2px rgba(141,23,48,.06)}
+.generator-mode button span{display:grid;gap:3px}
+.generator-mode button strong{font-size:11px}
+.generator-mode button small{font-size:9px;color:#8f8388}
+.campaign-ideas{min-height:132px!important}
+.monthly-counter{display:flex;gap:7px;flex-wrap:wrap;margin:-6px 0 15px}
+.monthly-counter span{background:#f4edef;color:#8d1730;border-radius:999px;padding:5px 9px;font-size:9px;font-weight:750}
+.generation-progress{display:flex;gap:12px;align-items:center;border:1px solid #e5ccd3;background:#fbf5f6;border-radius:10px;padding:12px;margin:0 0 12px}
+.generation-progress>span{width:17px;height:17px;border:2px solid #d9aab6;border-top-color:#9f1937;border-radius:50%;animation:generator-spin .8s linear infinite}
+.generation-progress strong{font-size:10px;color:#8d1730}
+.generation-progress p{margin:3px 0 0;font-size:9px;color:#776b70}
+@keyframes generator-spin{to{transform:rotate(360deg)}}
+@media(max-width:800px){.generator-mode{grid-template-columns:1fr}}
