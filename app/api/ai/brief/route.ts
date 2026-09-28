@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadStorytellingKnowledge } from "@/lib/ai/core";
 import { generateBrief, reviewBrief, reviewTotal } from "@/lib/ai/brief-engine";
+import { requireWorkspaceSession, unauthorizedJson } from "@/lib/api-auth";
 
 export const maxDuration=300;
 export const dynamic="force-dynamic";
@@ -9,7 +10,7 @@ function sameOrigin(request:Request){const origin=request.headers.get("origin");
 
 export async function POST(request:Request){
   try{
-    if(!sameOrigin(request))return errorJson("Cross-origin request ditolak.",403);
+    if(!sameOrigin(request))return errorJson("Cross-origin request ditolak.",403);if(!await requireWorkspaceSession(request))return unauthorizedJson();
     const body=await request.json().catch(()=>({}));
     const bundle=body?.bundle;
     const ideaId=String(body?.ideaId??"").trim();

@@ -84,6 +84,7 @@ Combined Vercel must have the existing AI/Supabase environment plus:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `DEEPSEEK_API_KEY`
 - `TAVILY_API_KEY`
+- `ALLOW_LOCAL_WORKSPACE` — optional, `1` only for offline dev without Supabase. Unset = fail-closed everywhere.
 
 Do not commit or document secret values.
 
