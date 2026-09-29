@@ -322,7 +322,7 @@ export default function BufferInstagramPublisher() {
           <label style={label}>PUBLISH VIA</label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <button type="button" onClick={() => { setProvider("buffer"); setError(""); setMessage(""); }} style={providerButton(provider === "buffer")}>Buffer</button>
-            <button type="button" disabled={!metaAvailable} onClick={() => { setProvider("meta"); setError(""); setMessage(""); }} style={{ ...providerButton(provider === "meta"), opacity: metaAvailable ? 1 : 0.45 }}>Meta Direct {metaAvailable ? "· Pilot" : ""}</button>
+            <button type="button" onClick={() => { setProvider("meta"); setMetaError(metaAvailable ? "" : "Meta Direct hanya tersedia untuk kartu SOCIAL Proxsis Academy. Pilih konten Proxsis Academy terlebih dahulu."); setError(""); setMessage(""); }} style={providerButton(provider === "meta")}>Meta Direct · Pilot</button>
           </div>
 
           {provider === "buffer" ? (
