@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, Instagram, Search, Sparkles } from "lucide-react";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { AnalyticsMedia } from "@/lib/social-dashboard/csv-import";
 import { useActiveBrand } from "@/components/active-brand";
+import { buildPerformancePdf } from "@/lib/social-dashboard/performance-pdf";
 import type {
   PerformanceAnalysis,
   PerformanceAnalysisInput,
@@ -28,35 +28,6 @@ const rangeLabels: Record<RangeValue, string> = {
 
 function toSlug(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-function safePdfText(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, "-")
-    .replace(/…/g, "...")
-    .replace(/[^\x20-\x7E\n]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number) {
-  const words = safePdfText(text).split(" ").filter(Boolean);
-  const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) line = candidate;
-    else {
-      if (line) lines.push(line);
-      line = word;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.length ? lines : [""];
 }
 
 function mediaDate(value?: string | null) {
@@ -290,111 +261,8 @@ async function exportPerformancePdf(
   input: PerformanceAnalysisInput,
   analysis: PerformanceAnalysis,
 ) {
-  const pdf = await PDFDocument.create();
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const pageSize: [number, number] = [595.28, 841.89];
-  const margin = 46;
-  const maroon = rgb(0.55, 0.09, 0.19);
-  const dark = rgb(0.13, 0.1, 0.11);
-  const muted = rgb(0.43, 0.39, 0.41);
-  const pale = rgb(0.98, 0.96, 0.97);
-  let page: PDFPage = pdf.addPage(pageSize);
-  let y = pageSize[1] - margin;
-
-  const newPage = () => {
-    page = pdf.addPage(pageSize);
-    y = pageSize[1] - margin;
-  };
-  const ensureSpace = (height: number) => {
-    if (y - height < 54) newPage();
-  };
-  const line = (text: string, options?: { size?: number; font?: PDFFont; color?: ReturnType<typeof rgb>; indent?: number; gap?: number }) => {
-    const size = options?.size || 9;
-    const font = options?.font || regular;
-    const indent = options?.indent || 0;
-    const rows = wrapPdfText(text, font, size, pageSize[0] - margin * 2 - indent);
-    ensureSpace(rows.length * (size + 4) + (options?.gap || 0));
-    for (const row of rows) {
-      page.drawText(row, { x: margin + indent, y, size, font, color: options?.color || dark });
-      y -= size + 4;
-    }
-    y -= options?.gap || 0;
-  };
-  const section = (title: string) => {
-    ensureSpace(34);
-    y -= 7;
-    page.drawText(safePdfText(title).toUpperCase(), { x: margin, y, size: 10, font: bold, color: maroon });
-    y -= 8;
-    page.drawLine({ start: { x: margin, y }, end: { x: pageSize[0] - margin, y }, thickness: 0.7, color: rgb(0.9, 0.86, 0.87) });
-    y -= 16;
-  };
-
-  page.drawText("INSTAGRAM CONTENT PERFORMANCE", { x: margin, y, size: 10, font: bold, color: maroon });
-  y -= 29;
-  page.drawText(safePdfText(input.brand), { x: margin, y, size: 23, font: bold, color: dark });
-  y -= 19;
-  page.drawText(safePdfText(`${input.account} | ${input.period} | ${input.source}`), { x: margin, y, size: 8, font: regular, color: muted, maxWidth: pageSize[0] - margin * 2 });
-  y -= 30;
-
-  const metrics = [
-    ["Posts", fmt.format(input.posts)],
-    ["Reach", fmt.format(input.totals.reach)],
-    ["Views", fmt.format(input.totals.views)],
-    ["Engagement", fmt.format(input.totals.interactions)],
-    ["ER by reach", `${decimal.format(input.engagementRateByReach)}%`],
-    ["Avg / post", decimal.format(input.avgPerPost)],
-  ];
-  metrics.forEach(([label, value], index) => {
-    const column = index % 3;
-    const row = Math.floor(index / 3);
-    const x = margin + column * 169;
-    const boxY = y - row * 61;
-    page.drawRectangle({ x, y: boxY - 42, width: 156, height: 49, color: pale, borderColor: rgb(0.91, 0.87, 0.88), borderWidth: 0.6 });
-    page.drawText(label.toUpperCase(), { x: x + 10, y: boxY - 8, size: 7, font: bold, color: muted });
-    page.drawText(value, { x: x + 10, y: boxY - 30, size: 16, font: bold, color: dark });
-  });
-  y -= 127;
-
-  section(`Executive summary - ${analysis.performance_status}`);
-  line(analysis.executive_summary, { size: 9.5, gap: 4 });
-
-  section("Temuan utama");
-  analysis.key_findings.forEach((finding, index) => {
-    line(`${index + 1}. ${finding.title}`, { font: bold, size: 9.5, gap: 1 });
-    line(`Evidence: ${finding.evidence}`, { color: muted, indent: 13 });
-    line(`Meaning: ${finding.meaning}`, { indent: 13, gap: 5 });
-  });
-
-  section("Action plan 30 hari");
-  analysis.action_plan.forEach((action, index) => {
-    ensureSpace(82);
-    line(`${index + 1}. [${action.priority}] ${action.timeline} - ${action.action}`, { font: bold, size: 9.2, gap: 1 });
-    line(`Alasan: ${action.rationale}`, { color: muted, indent: 13 });
-    line(`Ukuran sukses: ${action.success_metric}`, { indent: 13, gap: 6 });
-  });
-
-  if (input.topPosts.length) {
-    section("Top content");
-    input.topPosts.slice(0, 5).forEach((post, index) => {
-      line(`${index + 1}. ${post.caption || "Konten Instagram"}`, { font: bold, size: 9, gap: 1 });
-      line(`${post.type} | Reach ${fmt.format(post.reach)} | Interaksi ${fmt.format(post.interactions)} | ER ${decimal.format(post.engagementRate)}%`, { color: muted, indent: 13, gap: 4 });
-    });
-  }
-
-  if (analysis.data_notes.length) {
-    section("Catatan kualitas data");
-    analysis.data_notes.forEach((note, index) => line(`${index + 1}. ${note}`, { size: 8.5, gap: 2 }));
-  }
-
-  const pages = pdf.getPages();
-  pages.forEach((current, index) => {
-    current.drawLine({ start: { x: margin, y: 38 }, end: { x: pageSize[0] - margin, y: 38 }, thickness: 0.5, color: rgb(0.9, 0.87, 0.88) });
-    current.drawText(`Generated ${new Date(analysis.generated_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB | ${analysis.analysis_mode === "ai" ? "AI-assisted analysis" : "Data-based analysis"}`, { x: margin, y: 24, size: 6.5, font: regular, color: muted });
-    current.drawText(`${index + 1}/${pages.length}`, { x: pageSize[0] - margin - 18, y: 24, size: 6.5, font: regular, color: muted });
-  });
-
-  const bytes = await pdf.save();
+  const dashboardUrl = `${window.location.origin}/?section=Content%20Performance`;
+  const bytes = await buildPerformancePdf(input, analysis, dashboardUrl);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const url = URL.createObjectURL(new Blob([buffer], { type: "application/pdf" }));
   const anchor = document.createElement("a");
@@ -770,7 +638,7 @@ export function ContentPerformance() {
           </button>
           <button className="primary performance-action" onClick={() => void downloadPdf()} disabled={!data || analyzing || exporting}>
             <Download size={14} />
-            {exporting ? "Membuat PDF…" : "Export PDF"}
+            {exporting ? "Membuat PDF…" : "Export Interactive PDF"}
           </button>
         </div>
       </div>
