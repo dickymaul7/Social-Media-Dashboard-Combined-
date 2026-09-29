@@ -50,7 +50,9 @@ function defaultCaption(brief: BriefRecord) {
 }
 
 function isProxsisAcademy(brief: BriefRecord | null) {
-  return Boolean(brief && brief.brand_name.toLowerCase().replace(/[^a-z0-9]+/g, "") === "proxsisacademy");
+  if (!brief) return false;
+  const normalize = (value: unknown) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return [brief.brand_name, brief.brand_id].some((value) => normalize(value) === "proxsisacademy");
 }
 
 export default function BufferInstagramPublisher() {
