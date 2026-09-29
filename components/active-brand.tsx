@@ -4,7 +4,7 @@ import {createContext,useContext,useEffect,useMemo,useState} from "react";
 import {loadBrands,type WorkspaceBrand} from "@/lib/workspace-store";
 import {currentAccess} from "@/lib/access-control";
 export type BrandOption={id:string;name:string};
-export const BRAND_OPTIONS:BrandOption[]=[{id:"proxsis-consulting-group",name:"Proxsis Consulting Group"},{id:"proxsis-strategy",name:"Proxsis Strategy"},{id:"proxsis-infra",name:"Proxsis Infra"}];
+export const BRAND_OPTIONS:BrandOption[]=[{id:"proxsis-academy",name:"Proxsis Academy"},{id:"proxsis-consulting-group",name:"Proxsis Consulting Group"},{id:"proxsis-strategy",name:"Proxsis Strategy"},{id:"proxsis-infra",name:"Proxsis Infra"}];
 const NO_ACCESS_BRAND:BrandOption={id:"__no_brand_access__",name:"No Brand Access"};
 type ActiveBrandContextValue={activeBrand:BrandOption;brands:BrandOption[];setActiveBrandId:(id:string)=>void;refreshBrands:()=>void};
 const ActiveBrandContext=createContext<ActiveBrandContextValue|null>(null);const ACTIVE_KEY="proxsis-workspace:active-brand:v1";
