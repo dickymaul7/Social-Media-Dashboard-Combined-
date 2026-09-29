@@ -34,3 +34,6 @@ alter table public.meta_publish_jobs enable row level security;
 
 -- The application only accesses this table from authenticated server routes
 -- with the service role. No anon/authenticated direct-table policies are added.
+
+-- Refresh PostgREST so the new table is immediately available to server routes.
+notify pgrst, 'reload schema';
