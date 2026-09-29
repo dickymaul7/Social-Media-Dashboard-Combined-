@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/meta/instagram/publish-due",
-      "schedule": "* * * * *"
-    }
-  ]
-}
