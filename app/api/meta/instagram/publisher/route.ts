@@ -156,7 +156,13 @@ export async function POST(request: Request) {
       cache: "no-store",
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.message || "Antrean Meta Direct gagal disimpan.");
+    if (!response.ok) {
+      const databaseMessage = String(payload?.message || "");
+      if (payload?.code === "PGRST205" || databaseMessage.includes("meta_publish_jobs")) {
+        throw new Error("Tabel antrean Meta Direct belum tersedia di Supabase. Jalankan migration 20260929_meta_direct_publishing.sql terlebih dahulu.");
+      }
+      throw new Error(databaseMessage || "Antrean Meta Direct gagal disimpan.");
+    }
     return NextResponse.json({
       ok: true,
       job: { id, status: "scheduled", scheduledFor: due.toISOString() },
